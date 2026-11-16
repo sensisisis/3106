@@ -3,7 +3,7 @@ name: Build unsigned IPA
 on:
   workflow_dispatch:
   push:
-    branches: [3106, main]
+    branches: [3106, main, manus/build-ipa-20261116]
   pull_request:
     branches: [3106, main]
 
