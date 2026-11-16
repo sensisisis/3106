@@ -1479,3 +1479,31 @@
 "notification.sound.error.container" = "Could not resolve the app's container path. Make sure the app is installed and its container is accessible.";
 "notification.sound.error.target" = "Invalid target path.";
 "notification.sound.error.source" = "The selected audio file could not be read.";
+
+
+/* 3106 license activation */
+"license.brand_subtitle" = "SYSTEM UTILITIES";
+"license.secure_badge" = "LICENSE REQUIRED";
+"license.eyebrow" = "SECURE ACCESS";
+"license.title" = "Activate 3106";
+"license.subtitle" = "Enter your activation key to unlock the toolkit.";
+"license.key_label" = "ACTIVATION KEY";
+"license.placeholder" = "Paste your license key";
+"license.activate" = "Activate license";
+"license.verifying" = "Verifying license…";
+"license.privacy_note" = "Your key is stored securely on this device.";
+"license.footer" = "License validation is encrypted and device-bound.";
+"license.error.empty" = "Enter your activation key.";
+"license.error.paused" = "This license is temporarily paused.";
+"license.error.revoked" = "This license has been revoked.";
+"license.error.expired" = "This license has expired.";
+"license.error.invalid" = "That activation key isn't valid.";
+"license.error.device" = "This license is linked to another device.";
+"license.error.released" = "This license session has been released. Activate it again.";
+"license.error.resume" = "Your license session needs to be reactivated.";
+"license.error.denied" = "Activation was declined by the license server.";
+"license.error.network" = "Can't reach the license server. Check your connection and try again.";
+"license.error.cancelled" = "Activation was cancelled. Please try again.";
+"license.error.storage" = "Unable to securely save the license on this device.";
+"license.error.checking" = "Your license has expired. Reconnect to verify its status.";
+"license.error.superseded" = "Activation was superseded. Please retry.";

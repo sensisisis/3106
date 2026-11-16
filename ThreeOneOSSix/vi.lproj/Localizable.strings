@@ -1479,3 +1479,31 @@
 "notification.sound.error.container" = "Không thể xác định container của ứng dụng. Hãy đảm bảo ứng dụng đã cài và container truy cập được.";
 "notification.sound.error.target" = "Đường dẫn mục tiêu không hợp lệ.";
 "notification.sound.error.source" = "Không thể đọc tệp âm thanh đã chọn.";
+
+
+/* 3106 license activation */
+"license.brand_subtitle" = "TIỆN ÍCH HỆ THỐNG";
+"license.secure_badge" = "CẦN GIẤY PHÉP";
+"license.eyebrow" = "TRUY CẬP AN TOÀN";
+"license.title" = "Kích hoạt 3106";
+"license.subtitle" = "Nhập khóa kích hoạt để mở khóa bộ công cụ.";
+"license.key_label" = "KHÓA KÍCH HOẠT";
+"license.placeholder" = "Dán khóa bản quyền của bạn";
+"license.activate" = "Kích hoạt giấy phép";
+"license.verifying" = "Đang xác minh giấy phép…";
+"license.privacy_note" = "Khóa được lưu an toàn trên thiết bị này.";
+"license.footer" = "Giấy phép được xác minh mã hóa và gắn với thiết bị.";
+"license.error.empty" = "Vui lòng nhập khóa kích hoạt.";
+"license.error.paused" = "Giấy phép này tạm thời bị tạm dừng.";
+"license.error.revoked" = "Giấy phép này đã bị thu hồi.";
+"license.error.expired" = "Giấy phép này đã hết hạn.";
+"license.error.invalid" = "Khóa kích hoạt không hợp lệ.";
+"license.error.device" = "Giấy phép này đã được liên kết với thiết bị khác.";
+"license.error.released" = "Phiên giấy phép đã được giải phóng. Hãy kích hoạt lại.";
+"license.error.resume" = "Phiên giấy phép cần được kích hoạt lại.";
+"license.error.denied" = "Máy chủ giấy phép đã từ chối kích hoạt.";
+"license.error.network" = "Không thể kết nối máy chủ giấy phép. Hãy kiểm tra mạng và thử lại.";
+"license.error.cancelled" = "Quá trình kích hoạt bị hủy. Vui lòng thử lại.";
+"license.error.storage" = "Không thể lưu giấy phép an toàn trên thiết bị này.";
+"license.error.checking" = "Giấy phép đã hết hạn. Kết nối lại để kiểm tra trạng thái.";
+"license.error.superseded" = "Yêu cầu kích hoạt đã bị thay thế. Vui lòng thử lại.";

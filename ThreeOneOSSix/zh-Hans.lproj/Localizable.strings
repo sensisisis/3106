@@ -1479,3 +1479,31 @@
 "notification.sound.error.container" = "无法解析该应用的容器路径，请确认应用已安装且容器可访问。";
 "notification.sound.error.target" = "目标路径无效。";
 "notification.sound.error.source" = "无法读取所选音频文件。";
+
+
+/* 3106 license activation */
+"license.brand_subtitle" = "系统工具";
+"license.secure_badge" = "需要许可证";
+"license.eyebrow" = "安全访问";
+"license.title" = "激活 3106";
+"license.subtitle" = "输入激活密钥以解锁工具集。";
+"license.key_label" = "激活密钥";
+"license.placeholder" = "粘贴许可证密钥";
+"license.activate" = "激活许可证";
+"license.verifying" = "正在验证许可证…";
+"license.privacy_note" = "密钥将安全地保存在此设备上。";
+"license.footer" = "许可证验证经过加密并绑定到设备。";
+"license.error.empty" = "请输入激活密钥。";
+"license.error.paused" = "此许可证已暂时暂停。";
+"license.error.revoked" = "此许可证已被撤销。";
+"license.error.expired" = "此许可证已过期。";
+"license.error.invalid" = "激活密钥无效。";
+"license.error.device" = "此许可证已绑定到另一台设备。";
+"license.error.released" = "许可证会话已释放，请重新激活。";
+"license.error.resume" = "需要重新激活许可证会话。";
+"license.error.denied" = "许可证服务器拒绝了此次激活。";
+"license.error.network" = "无法连接许可证服务器。请检查网络后重试。";
+"license.error.cancelled" = "激活已取消，请重试。";
+"license.error.storage" = "无法在此设备上安全保存许可证。";
+"license.error.checking" = "许可证已过期，请重新连接以验证状态。";
+"license.error.superseded" = "激活请求已被替换，请重试。";

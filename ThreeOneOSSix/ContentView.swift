@@ -4,6 +4,7 @@ import UIKit
 struct ContentView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var patchDraftCoordinator: PatchDraftCoordinator
     @EnvironmentObject private var patchStore: PatchProjectStore
     @EnvironmentObject private var repositoryStore: PackageRepositoryStore
@@ -12,6 +13,7 @@ struct ContentView: View {
     @State private var showLogs = false
     @State private var showAppGroupAlert = false
     @StateObject private var scanCoordinator = ScanCoordinator()
+    @StateObject private var licenseSession = LicenseSession()
 
     init() {
 #if targetEnvironment(simulator)
@@ -45,19 +47,34 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if horizontalSizeClass == .regular {
-                regularLayout
+            if licenseSession.isAuthorized {
+                Group {
+                    if horizontalSizeClass == .regular {
+                        regularLayout
+                    } else {
+                        compactLayout
+                    }
+                }
             } else {
-                compactLayout
+                LicenseActivationView(
+                    sessionNotice: licenseSession.notice,
+                    onActivate: { key in await licenseSession.activate(key) }
+                )
             }
         }
         .tint(AppTheme.accent)
         .imageScale(.small)
+        .task(id: scenePhase) {
+            await licenseSession.runForegroundSession(for: scenePhase)
+        }
         .onChange(of: patchDraftCoordinator.request?.id) { requestID in
             if requestID != nil { tabNavigation.select(AppSection.installed.rawValue) }
         }
         .onChange(of: patchDraftCoordinator.importRequest?.id) { requestID in
             if requestID != nil { tabNavigation.select(AppSection.installed.rawValue) }
+        }
+        .onChange(of: licenseSession.isAuthorized) { authorized in
+            if !authorized { showSettings = false }
         }
         .onAppear {
             tabNavigation.reconcileSelection(with: featureVisibility)
@@ -247,4 +264,3 @@ private struct CompactTabLabel: View {
         Text(title)
     }
 }
-
