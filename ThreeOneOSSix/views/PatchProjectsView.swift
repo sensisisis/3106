@@ -94,6 +94,15 @@ struct PatchProjectsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                AuraConsoleHeader(
+                    title: language.text("tab.installed"),
+                    subtitle: "PATCH CONTROL / MODULES",
+                    systemImage: "square.stack.3d.up.fill"
+                )
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
                 AppSearchField(
                     text: $searchText,
                     prompt: language.text("installed.search"),
@@ -145,6 +154,9 @@ struct PatchProjectsView: View {
                                             )
                                         }
                                     }
+                                    .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
                                 }
                             }
                         }
@@ -152,12 +164,18 @@ struct PatchProjectsView: View {
                     if cleanerEnabled {
                         Section(language.text("repository.utilities")) {
                             cleanerRow
+                                .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                         }
                     }
                 }
                 .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(AppTheme.pageBackground)
             }
-            .navigationTitle(language.text("tab.installed"))
+            .background(AppTheme.pageBackground.ignoresSafeArea())
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -328,7 +346,20 @@ struct PatchProjectsView: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.12), Color.white.opacity(0.045)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.8)
+        }
     }
 
     private var cleanerRow: some View {
@@ -352,6 +383,20 @@ struct PatchProjectsView: View {
                     .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.12), Color.white.opacity(0.045)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.8)
+            }
         }
         .buttonStyle(.plain)
     }
@@ -429,12 +474,18 @@ struct PatchProjectsView: View {
                 PatchProjectRow(item: item, language: language)
             }
             .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         } else {
             NavigationLink {
                 PatchProjectDetailView(store: store, projectID: item.id)
             } label: {
                 PatchProjectRow(item: item, language: language)
             }
+            .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
@@ -527,7 +578,21 @@ private struct PatchProjectRow: View {
                     .accessibilityLabel(language.text("patch.private"))
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.12), Color.white.opacity(0.045), Color.black.opacity(0.18)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.30), lineWidth: 0.8)
+        }
+        .shadow(color: .black.opacity(0.45), radius: 6, y: 2)
     }
 
     private var rowDetail: String {

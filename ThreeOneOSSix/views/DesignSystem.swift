@@ -1,27 +1,28 @@
 import SwiftUI
 
 enum AppTheme {
-    static let accent = Color(
-        uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? UIColor(red: 1.00, green: 0.64, blue: 0.42, alpha: 1.00)
-                : UIColor(red: 0.85, green: 0.42, blue: 0.20, alpha: 1.00)
-        }
+    static let accent = Color.white
+    static let accentSecondary = Color(white: 0.62)
+    static let pageBackground = Color.black
+    static let consoleBackground = Color(white: 0.045)
+    static let accentGradient = LinearGradient(
+        colors: [.white, Color(white: 0.38)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
     )
-    static let pageBackground = Color(uiColor: .systemBackground)
-    static let consoleBackground = Color(uiColor: .secondarySystemBackground)
-    static let pageInset: CGFloat = 16
-    static let rowIconSize: CGFloat = 17
-    static let rowIconFrame: CGFloat = 28
-    static let fileRowIconSize: CGFloat = 17
-    static let fileRowIconFrame: CGFloat = 30
-    static let fileRowHeight: CGFloat = 60
+    static let pageInset: CGFloat = 12
+    static let rowIconSize: CGFloat = 15
+    static let rowIconFrame: CGFloat = 26
+    static let fileRowIconSize: CGFloat = 15
+    static let fileRowIconFrame: CGFloat = 27
+    static let fileRowHeight: CGFloat = 54
     static let appIconSize: CGFloat = 32
     static let emptyIconSize: CGFloat = 30
     static let selectionIconSize: CGFloat = 18
-    static let contentCardCornerRadius: CGFloat = 20
-    static let contentCardInset: CGFloat = 16
-    static let contentCardPadding: CGFloat = 16
+    static let contentCardCornerRadius: CGFloat = 14
+    static let contentCardInset: CGFloat = 10
+    static let contentCardPadding: CGFloat = 12
+    static let actionCornerRadius: CGFloat = 10
 }
 
 struct AppCardBorder: View {
@@ -31,8 +32,8 @@ struct AppCardBorder: View {
             style: .continuous
         )
         .strokeBorder(
-            Color(uiColor: .separator).opacity(0.22),
-            lineWidth: 0.5
+            Color.white.opacity(0.26),
+            lineWidth: 0.7
         )
         .accessibilityHidden(true)
     }
@@ -53,6 +54,10 @@ struct AppRowIcon: View {
                 .foregroundStyle(tint)
         }
         .frame(width: frameSize, height: frameSize)
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(tint.opacity(0.20), lineWidth: 0.5)
+        }
         .accessibilityHidden(true)
     }
 }
@@ -90,9 +95,13 @@ struct AppSearchField: View {
         .padding(.horizontal, 11)
         .frame(minHeight: 36)
         .background(
-            Color(uiColor: .secondarySystemFill),
+            Color.white.opacity(0.075),
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.7)
+        }
         .padding(.horizontal, AppTheme.pageInset)
         .padding(.vertical, 8)
         .background(.bar)
@@ -120,6 +129,78 @@ struct AppLogo: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
+        }
+        .shadow(color: .white.opacity(0.14), radius: 8, y: 3)
         .accessibilityHidden(true)
+    }
+}
+
+struct AuraConsoleHeader: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Image("ActivityHeaderArt")
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+
+            LinearGradient(
+                colors: [.black.opacity(0.12), .clear, .black.opacity(0.88)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(Color.white.opacity(0.42), lineWidth: 0.7))
+                    Spacer()
+                    HStack(spacing: 6) {
+                        Circle().fill(.white).frame(width: 6, height: 6)
+                        Text("FAX AURA")
+                            .font(.system(size: 8, weight: .black, design: .monospaced))
+                            .tracking(0.5)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .background(Color.black.opacity(0.55), in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.42), lineWidth: 0.7))
+                }
+                Spacer()
+                Text(title)
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(subtitle.uppercased())
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 112)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.70), lineWidth: 0.9)
+        }
+        .shadow(color: .white.opacity(0.12), radius: 9, y: 3)
+        .accessibilityElement(children: .combine)
     }
 }

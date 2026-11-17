@@ -19,6 +19,17 @@ struct FeatureHubView: View {
         NavigationStack {
             List {
                 Section {
+                    AuraConsoleHeader(
+                        title: "3106",
+                        subtitle: "DEVICE CONTROL / 3106",
+                        systemImage: "slider.horizontal.3"
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                    .listRowSeparator(.hidden)
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
                     LabeledContent(language.text("home.version"), value: appVersion)
                     LabeledContent(
                         language.text("home.backend"),
@@ -313,7 +324,20 @@ struct FeatureHubView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.10), Color.white.opacity(0.035)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.7)
+        }
     }
 
     private var appVersion: String {

@@ -64,6 +64,7 @@ struct ContentView: View {
         }
         .tint(AppTheme.accent)
         .imageScale(.small)
+        .preferredColorScheme(.dark)
         .task(id: scenePhase) {
             await licenseSession.runForegroundSession(for: scenePhase)
         }
