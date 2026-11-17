@@ -2,11 +2,12 @@ import Foundation
 import Security
 import SwiftUI
 import UIKit
+import CryptoKit
 import Darwin
 
 private enum LicenseValidationOutcome {
-    case active(FirebaseLicenseResponse)
-    case rejected(FirebaseLicenseResponse)
+    case active(SupabaseLicenseResponse)
+    case rejected(SupabaseLicenseResponse)
     case transportFailure(String)
 }
 
@@ -20,10 +21,11 @@ final class LicenseSession: ObservableObject {
     @Published private(set) var isAuthorized = false
     @Published private(set) var notice: String?
 
-    private let sessionVersionStorage = "3106.license.session-version"
-    private let fallbackDeviceIDStorage = "3106.license.fallback-device-id"
-    private let expirationStorage = "3106.license.expires-at"
-    private let firebaseDatabaseURL = "https://aimforge-331a9-default-rtdb.firebaseio.com"
+    private let sessionVersionStorage = "3106.supabase.license.session-version"
+    private let fallbackDeviceIDStorage = "3106.supabase.license.fallback-device-id"
+    private let expirationStorage = "3106.supabase.license.expires-at"
+    private let supabaseRPCURL = "https://skarpahwcwkqdfxgtvlp.supabase.co/rest/v1/rpc/fax_license_validate"
+    private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrYXJwYWh3Y3drcWRmeGd0dmxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMjc3NTYsImV4cCI6MjEwNzYwMzc1Nn0.PUh5QIs_W61En2PdyML31uzMFG_8NvCAHeRp1qYBzFw"
     private var validationGeneration = 0
     private var explicitActivationInFlight = false
 
@@ -167,134 +169,107 @@ final class LicenseSession: ObservableObject {
         sessionVersion: Int?,
         claim: Bool
     ) async -> LicenseValidationOutcome {
-        _ = sessionVersion
-        _ = claim
-
-        let key = normalized(key)
-        guard isSafeFirebaseKey(key),
-              let url = firebaseLicenseURL(for: key) else {
-            return .rejected(makeResponse(ok: false, code: "invalid", expiration: nil))
+        let normalizedKey = normalized(key)
+        guard !normalizedKey.isEmpty else {
+            return .transportFailure("license.error.network")
         }
 
-        for _ in 0..<3 {
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.timeoutInterval = 20
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("true", forHTTPHeaderField: "X-Firebase-ETag")
+        let hash = SHA256.hash(data: Data(normalizedKey.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
 
-            do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse,
-                      (200..<300).contains(http.statusCode) else {
-                    return .transportFailure("license.error.network")
-                }
+        guard let url = URL(string: supabaseRPCURL) else {
+            return .transportFailure("license.error.network")
+        }
 
-                let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-                guard var record = value as? [String: Any] else {
-                    return .rejected(makeResponse(ok: false, code: "invalid", expiration: nil))
-                }
+        let sessionValue: Any
+        if let sessionVersion {
+            sessionValue = sessionVersion
+        } else {
+            sessionValue = NSNull()
+        }
 
-                let expiration = firebaseExpiration(record["expiration"])
-                let status = (record["status"] as? String)?.uppercased()
-                if status == "REVOKED" {
-                    return .rejected(makeResponse(ok: false, code: "revoked", expiration: expiration))
-                }
-                if let expiration, expiration <= Date() {
-                    return .rejected(makeResponse(ok: false, code: "expired", expiration: expiration))
-                }
+        let payload: [String: Any] = [
+            "p_key_hash": hash,
+            "p_device_id": deviceID,
+            "p_device_model": deviceModel,
+            "p_device_identifier": machineIdentifier,
+            "p_ios_version": UIDevice.current.systemVersion,
+            "p_session_version": sessionValue,
+            "p_claim": claim
+        ]
 
-                let boundDeviceValue = record["hwid"] as? String
-                let boundDevice = boundDeviceValue?.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let boundDevice, !boundDevice.isEmpty {
-                    guard boundDevice == deviceID else {
-                        return .rejected(makeResponse(ok: false, code: "device_mismatch", expiration: expiration))
-                    }
-                    return .active(makeResponse(ok: true, code: "active", expiration: expiration))
-                }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-                guard let etag = http.value(forHTTPHeaderField: "ETag") else {
-                    return .transportFailure("license.error.network")
-                }
-                record["hwid"] = deviceID
-                record["lastUsedAt"] = Int(Date().timeIntervalSince1970 * 1_000)
-
-                var claimRequest = URLRequest(url: url)
-                claimRequest.httpMethod = "PUT"
-                claimRequest.timeoutInterval = 20
-                claimRequest.setValue("application/json", forHTTPHeaderField: "Accept")
-                claimRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                claimRequest.setValue(etag, forHTTPHeaderField: "If-Match")
-                claimRequest.httpBody = try JSONSerialization.data(withJSONObject: record, options: [])
-
-                let (_, claimResponse) = try await URLSession.shared.data(for: claimRequest)
-                guard let claimHTTP = claimResponse as? HTTPURLResponse else {
-                    return .transportFailure("license.error.network")
-                }
-                if claimHTTP.statusCode == 412 {
-                    continue
-                }
-                guard (200..<300).contains(claimHTTP.statusCode) else {
-                    return .transportFailure("license.error.network")
-                }
-                return .active(makeResponse(ok: true, code: "active", expiration: expiration))
-            } catch is CancellationError {
-                return .transportFailure("license.error.cancelled")
-            } catch {
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
                 return .transportFailure("license.error.network")
+            }
+
+            let validation = try JSONDecoder().decode(SupabaseLicenseResponse.self, from: data)
+            guard isStrictlyValid(validation) else {
+                return .transportFailure("license.error.network")
+            }
+
+            let code = validation.code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if validation.ok {
+                guard code == "active", validation.sessionVersion > 0 else {
+                    return .transportFailure("license.error.network")
+                }
+                return .active(validation)
+            }
+            return .rejected(validation)
+        } catch is CancellationError {
+            return .transportFailure("license.error.cancelled")
+        } catch {
+            return .transportFailure("license.error.network")
+        }
+    }
+
+    private func isStrictlyValid(_ response: SupabaseLicenseResponse) -> Bool {
+        let code = response.code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !code.isEmpty,
+              let serverNow = parseServerDate(response.serverNow),
+              serverNow.timeIntervalSince1970.isFinite else {
+            return false
+        }
+
+        if let expiresAt = response.expiresAt {
+            guard !expiresAt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let expiration = parseServerDate(expiresAt),
+                  expiration.timeIntervalSince1970.isFinite else {
+                return false
+            }
+            if response.ok, expiration <= serverNow {
+                return false
             }
         }
 
-        return .transportFailure("license.error.network")
-    }
-
-    private func firebaseLicenseURL(for key: String) -> URL? {
-        let allowedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        guard let encodedKey = key.addingPercentEncoding(withAllowedCharacters: allowedCharacters) else {
-            return nil
+        if let remainingSeconds = response.remainingSeconds {
+            guard remainingSeconds.isFinite else { return false }
+            if response.ok, remainingSeconds < 0 { return false }
         }
-        return URL(string: "\(firebaseDatabaseURL)/keys/\(encodedKey).json")
-    }
 
-    private func isSafeFirebaseKey(_ key: String) -> Bool {
-        guard !key.isEmpty, key.count <= 128 else { return false }
-        let allowedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        return key.rangeOfCharacter(from: allowedCharacters.inverted) == nil
-    }
-
-    private func firebaseExpiration(_ value: Any?) -> Date? {
-        if let string = value as? String {
-            if string.uppercased() == "PERMANENTE" { return nil }
-            guard let milliseconds = Double(string) else { return nil }
-            return Date(timeIntervalSince1970: milliseconds / 1_000)
+        if response.ok {
+            guard code == "active", response.sessionVersion > 0 else { return false }
+        } else {
+            guard code != "active" else { return false }
         }
-        if let number = value as? NSNumber {
-            return Date(timeIntervalSince1970: number.doubleValue / 1_000)
-        }
-        return nil
-    }
-
-    private func makeResponse(
-        ok: Bool,
-        code: String,
-        expiration: Date?
-    ) -> FirebaseLicenseResponse {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let now = Date()
-        return FirebaseLicenseResponse(
-            ok: ok,
-            code: code,
-            expiresAt: expiration.map { formatter.string(from: $0) },
-            serverNow: formatter.string(from: now),
-            sessionVersion: 1,
-            remainingSeconds: expiration.map { $0.timeIntervalSince(now) }
-        )
+        return true
     }
 
     private func persistSession(
         key: String,
-        response: FirebaseLicenseResponse,
+        response: SupabaseLicenseResponse,
         preserveExpiration: Bool = false
     ) -> Bool {
         guard storeKeyIfNeeded(key) else { return false }
@@ -304,23 +279,25 @@ final class LicenseSession: ObservableObject {
     }
 
     private func persistExpiration(
-        from response: FirebaseLicenseResponse,
+        from response: SupabaseLicenseResponse,
         preserveExisting: Bool
     ) {
         guard let expiresAt = response.expiresAt,
-              let expiration = parseServerDate(expiresAt) else {
+              let expiration = parseServerDate(expiresAt),
+              let serverNow = parseServerDate(response.serverNow) else {
             if !preserveExisting {
                 UserDefaults.standard.removeObject(forKey: expirationStorage)
             }
             return
         }
 
-        let adjustedExpiration: Date
-        if let serverNow = parseServerDate(response.serverNow) {
-            let localClockSkew = Date().timeIntervalSince1970 - serverNow.timeIntervalSince1970
-            adjustedExpiration = expiration.addingTimeInterval(localClockSkew)
-        } else {
-            adjustedExpiration = expiration
+        let localClockSkew = Date().timeIntervalSince1970 - serverNow.timeIntervalSince1970
+        let adjustedExpiration = expiration.addingTimeInterval(localClockSkew)
+        guard adjustedExpiration.timeIntervalSince1970.isFinite else {
+            if !preserveExisting {
+                UserDefaults.standard.removeObject(forKey: expirationStorage)
+            }
+            return
         }
         UserDefaults.standard.set(
             adjustedExpiration.timeIntervalSince1970,
@@ -349,14 +326,17 @@ final class LicenseSession: ObservableObject {
     }
 
     private func storedSessionVersion(for key: String) -> Int? {
-        guard let savedKey = storedKey, normalized(savedKey) == normalized(key) else {
+        guard let savedKey = storedKey, normalized(savedKey) == normalized(key),
+              let value = UserDefaults.standard.object(forKey: sessionVersionStorage) as? Int,
+              value > 0 else {
             return nil
         }
-        return UserDefaults.standard.object(forKey: sessionVersionStorage) as? Int
+        return value
     }
 
     private var localExpirationHasPassed: Bool {
-        guard let value = UserDefaults.standard.object(forKey: expirationStorage) as? NSNumber else {
+        guard let value = UserDefaults.standard.object(forKey: expirationStorage) as? NSNumber,
+              value.doubleValue.isFinite else {
             return false
         }
         return value.doubleValue <= Date().timeIntervalSince1970
@@ -456,7 +436,7 @@ final class LicenseSession: ObservableObject {
 }
 
 private enum LicenseKeychain {
-    private static let service = "com.qingtang.3106.license"
+    private static let service = "com.qingtang.3106.supabase.license"
     private static let account = "activation-key"
 
     static func load() -> String? {
@@ -505,13 +485,31 @@ private enum LicenseKeychainError: Error {
     case saveFailed(OSStatus)
 }
 
-private struct FirebaseLicenseResponse {
+private struct SupabaseLicenseResponse: Decodable {
     let ok: Bool
     let code: String
     let expiresAt: String?
     let serverNow: String
     let sessionVersion: Int
     let remainingSeconds: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, code
+        case expiresAt = "expires_at"
+        case serverNow = "server_now"
+        case sessionVersion = "session_version"
+        case remainingSeconds = "remaining_seconds"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decode(Bool.self, forKey: .ok)
+        code = try container.decode(String.self, forKey: .code)
+        expiresAt = try container.decodeIfPresent(String.self, forKey: .expiresAt)
+        serverNow = try container.decode(String.self, forKey: .serverNow)
+        sessionVersion = try container.decode(Int.self, forKey: .sessionVersion)
+        remainingSeconds = try container.decodeIfPresent(Double.self, forKey: .remainingSeconds)
+    }
 }
 
 struct LicenseActivationView: View {
