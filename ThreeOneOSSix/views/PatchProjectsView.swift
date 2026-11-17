@@ -860,43 +860,74 @@ private struct PatchModuleToggle: View {
     }
 
     var body: some View {
-        Button {
-            requestToggle(enabled: !isActive)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: isActive ? "checkmark.circle.fill" : "bolt.fill")
-                    .font(.system(size: 11, weight: .bold))
-                Text(language.text(isActive ? "patch.module_running" : "patch.module_start"))
-                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+        VStack(alignment: .trailing, spacing: 3) {
+            Text(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
+                .font(.system(size: 7, weight: .bold, design: .monospaced))
+                .foregroundStyle(isActive ? Color.green.opacity(0.95) : Color.secondary)
+                .lineLimit(1)
+
+            Text(language.text("patch.module_start"))
+                .font(.system(size: 6.5, weight: .black, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.88))
+                .lineLimit(1)
+
+            Button {
+                requestToggle(enabled: !isActive)
+            } label: {
+                HStack(spacing: 4) {
+                    Text(isActive ? "ON" : "OFF")
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                    Spacer(minLength: 0)
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.white, Color(white: 0.82)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 17, height: 17)
+                        .overlay {
+                            Circle().strokeBorder(.white.opacity(0.82), lineWidth: 0.6)
+                        }
+                        .shadow(color: .black.opacity(0.38), radius: 1.5, y: 1)
+                }
+                .foregroundStyle(.white)
+                .padding(.leading, 8)
+                .padding(.trailing, 4)
+                .frame(width: 70, height: 26)
+                .background(
+                    LinearGradient(
+                        colors: isActive
+                            ? [Color.green.opacity(0.42), Color.green.opacity(0.20)]
+                            : [Color.white.opacity(0.18), Color.white.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule()
+                        .strokeBorder(
+                            isActive ? Color.green.opacity(0.88) : Color.gray.opacity(0.72),
+                            lineWidth: 0.9
+                        )
+                }
+                .shadow(
+                    color: isActive ? Color.green.opacity(0.25) : Color.black.opacity(0.22),
+                    radius: 3,
+                    y: 1
+                )
+                .animation(.easeInOut(duration: 0.16), value: isActive)
             }
-            .foregroundStyle(isActive ? Color.black : Color.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 34)
-            .background(
-                isActive ? Color.green : Color.white.opacity(0.08),
-                in: Capsule()
+            .buttonStyle(.plain)
+            .disabled(
+                appIsBusy || storeIsBusy || legacyReceipt != nil || hasUnclassifiedTransaction
             )
-            .overlay {
-                Capsule()
-                    .strokeBorder(
-                        isActive ? Color.green.opacity(0.95) : Color.gray.opacity(0.48),
-                        lineWidth: 0.9
-                    )
-            }
-            .shadow(color: isActive ? Color.green.opacity(0.25) : .clear, radius: 4)
-            .animation(.easeInOut(duration: 0.16), value: isActive)
+            .accessibilityLabel("\(project.name), \(isActive ? "ON" : "OFF")")
+            .accessibilityValue(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
         }
-        .buttonStyle(.plain)
-        .disabled(
-            appIsBusy || storeIsBusy || legacyReceipt != nil || hasUnclassifiedTransaction
-        )
-        .accessibilityLabel(
-            "\(project.name), \(language.text(isActive ? "patch.module_running" : "patch.module_start"))"
-        )
-        .accessibilityValue(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
-        .frame(width: 104)
+        .frame(width: 78)
         .confirmationDialog(
             language.text("patch.restore_changed_title"),
             isPresented: $showChangedRestoreConfirmation,
