@@ -37,6 +37,8 @@ struct PatchPasswordRequest: Identifiable {
 enum PatchProjectLibrary {
     private static let authorCopiesDirectoryName = ".AuthorCopies"
     private static let originsDirectoryName = ".Origins"
+    private static let bundledPatchDirectoryName = "Avatar2"
+    private static let bundledPatchSeedMarkerName = ".avatar2-seeded-v1"
 
     static func packageRootURL(fileManager: FileManager = .default) throws -> URL {
         let base = try fileManager.url(
@@ -58,6 +60,7 @@ enum PatchProjectLibrary {
     }
 
     static func load(fileManager: FileManager = .default) -> [PatchLibraryItem] {
+        installBundledPackagesIfNeeded(fileManager: fileManager)
         guard let root = try? packageRootURL(fileManager: fileManager),
               let urls = try? fileManager.contentsOfDirectory(
                 at: root,
@@ -117,6 +120,55 @@ enum PatchProjectLibrary {
         }
         return byID.values.sorted {
             ($0.project?.updatedAt ?? .distantPast) > ($1.project?.updatedAt ?? .distantPast)
+        }
+    }
+
+    private static func installBundledPackagesIfNeeded(fileManager: FileManager) {
+        guard let root = try? packageRootURL(fileManager: fileManager) else { return }
+        let markerURL = root.appendingPathComponent(bundledPatchSeedMarkerName)
+        guard !fileManager.fileExists(atPath: markerURL.path),
+              let resourceRoot = Bundle.main.resourceURL?.appendingPathComponent(
+                bundledPatchDirectoryName,
+                isDirectory: true
+              ),
+              let bundledURLs = try? fileManager.contentsOfDirectory(
+                at: resourceRoot,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+              ) else { return }
+
+        let packages = bundledURLs.filter { $0.pathExtension.lowercased() == "3105" }
+        guard !packages.isEmpty else { return }
+
+        var succeeded = true
+        for sourceURL in packages {
+            do {
+                let data = try readPackage(at: sourceURL)
+                let summary = try PatchPackageCodec.inspect(data)
+                let destinationURL = root
+                    .appendingPathComponent("Avatar2-\(summary.packageID.uuidString)")
+                    .appendingPathExtension("3105")
+                guard !fileManager.fileExists(atPath: destinationURL.path) else { continue }
+                try data.write(
+                    to: destinationURL,
+                    options: [.atomic, .completeFileProtection]
+                )
+                log("patch: bundled Avatar2 package installed — \(sourceURL.lastPathComponent)")
+            } catch {
+                succeeded = false
+                log("patch: failed to install bundled Avatar2 package — \(sourceURL.lastPathComponent)")
+            }
+        }
+
+        if succeeded {
+            do {
+                try Data("1".utf8).write(
+                    to: markerURL,
+                    options: [.atomic, .completeFileProtection]
+                )
+            } catch {
+                log("patch: could not save Avatar2 seed marker")
+            }
         }
     }
 
