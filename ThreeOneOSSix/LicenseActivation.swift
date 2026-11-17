@@ -43,6 +43,8 @@ final class LicenseSession: ObservableObject {
     private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrYXJwYWh3Y3drcWRmeGd0dmxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMjc3NTYsImV4cCI6MjEwNzYwMzc1Nn0.PUh5QIs_W61En2PdyML31uzMFG_8NvCAHeRp1qYBzFw"
     private var validationGeneration = 0
     private var explicitActivationInFlight = false
+    private var cachedDeviceID: String?
+    private var deviceIdentityResolutionFailed = false
 
     func runForegroundSession(for phase: ScenePhase) async {
         guard phase == .active else { return }
@@ -204,9 +206,13 @@ final class LicenseSession: ObservableObject {
             sessionValue = NSNull()
         }
 
+        guard let stableDeviceID = deviceID else {
+            return .transportFailure("license.error.network")
+        }
+
         let payload: [String: Any] = [
             "p_key_hash": hash,
-            "p_device_id": deviceID,
+            "p_device_id": stableDeviceID,
             "p_device_model": deviceModel,
             "p_device_identifier": machineIdentifier,
             "p_ios_version": UIDevice.current.systemVersion,
@@ -391,18 +397,57 @@ final class LicenseSession: ObservableObject {
         }
     }
 
-    private var deviceID: String {
-        if let vendorID = UIDevice.current.identifierForVendor?.uuidString,
-           !vendorID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return vendorID
+    private var deviceID: String? {
+        if let cachedDeviceID {
+            return cachedDeviceID
         }
+        guard !deviceIdentityResolutionFailed else { return nil }
+
         let defaults = UserDefaults.standard
-        if let fallback = defaults.string(forKey: fallbackDeviceIDStorage), !fallback.isEmpty {
-            return fallback
+        let vendorID = (UIDevice.current.identifierForVendor?.uuidString)
+            .flatMap(Self.nonEmptyDeviceID)
+        let legacyFallback = defaults.string(forKey: fallbackDeviceIDStorage)
+            .flatMap(Self.nonEmptyDeviceID)
+
+        let savedDeviceID: String?
+        do {
+            savedDeviceID = try LicenseKeychain.loadDeviceID()
+        } catch {
+            guard vendorID == nil, let legacyFallback else {
+                deviceIdentityResolutionFailed = true
+                return nil
+            }
+            cachedDeviceID = legacyFallback
+            return legacyFallback
         }
-        let fallback = UUID().uuidString
-        defaults.set(fallback, forKey: fallbackDeviceIDStorage)
-        return fallback
+
+        if let savedDeviceID {
+            cachedDeviceID = savedDeviceID
+            defaults.set(savedDeviceID, forKey: fallbackDeviceIDStorage)
+            return savedDeviceID
+        }
+
+        // The legacy fallback was only authoritative when IDFV was unavailable.
+        // Do not let an old backup override a newly available IDFV.
+        let candidate = vendorID ?? legacyFallback ?? UUID().uuidString
+        do {
+            try LicenseKeychain.saveDeviceID(candidate)
+        } catch {
+            guard vendorID == nil, let legacyFallback else {
+                // Never mint a new identity when Keychain access is unavailable.
+                deviceIdentityResolutionFailed = true
+                return nil
+            }
+            cachedDeviceID = legacyFallback
+            return legacyFallback
+        }
+        defaults.set(candidate, forKey: fallbackDeviceIDStorage)
+        cachedDeviceID = candidate
+        return candidate
+    }
+
+    private static func nonEmptyDeviceID(_ value: String) -> String? {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : value
     }
 
     private func normalized(_ key: String) -> String {
@@ -453,6 +498,7 @@ final class LicenseSession: ObservableObject {
 private enum LicenseKeychain {
     private static let service = "com.qingtang.3106.supabase.license"
     private static let account = "activation-key"
+    private static let deviceIDAccount = "bound-device-id"
 
     static func load() -> String? {
         let query: [String: Any] = [
@@ -486,6 +532,57 @@ private enum LicenseKeychain {
         }
     }
 
+    static func loadDeviceID() throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: deviceIDAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        switch status {
+        case errSecSuccess:
+            guard let data = result as? Data,
+                  let value = String(data: data, encoding: .utf8),
+                  !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw LicenseKeychainError.invalidDeviceID
+            }
+            return value
+        case errSecItemNotFound:
+            return nil
+        default:
+            throw LicenseKeychainError.loadFailed(status)
+        }
+    }
+
+    static func saveDeviceID(_ deviceID: String) throws {
+        let identity: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: deviceIDAccount
+        ]
+        let update: [String: Any] = [
+            kSecValueData as String: Data(deviceID.utf8)
+        ]
+        let updateStatus = SecItemUpdate(identity as CFDictionary, update as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+        guard updateStatus == errSecItemNotFound else {
+            throw LicenseKeychainError.saveFailed(updateStatus)
+        }
+
+        var item = identity
+        item[kSecValueData as String] = Data(deviceID.utf8)
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let addStatus = SecItemAdd(item as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw LicenseKeychainError.saveFailed(addStatus)
+        }
+    }
+
     static func delete() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -498,6 +595,8 @@ private enum LicenseKeychain {
 
 private enum LicenseKeychainError: Error {
     case saveFailed(OSStatus)
+    case loadFailed(OSStatus)
+    case invalidDeviceID
 }
 
 private struct SupabaseLicenseResponse: Decodable {
@@ -550,9 +649,9 @@ struct LicenseActivationView: View {
             GeometryReader { geometry in
                 ScrollView {
                     activationShell
-                        .frame(maxWidth: 480)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 24)
+                        .frame(maxWidth: 360)
+                        .padding(.horizontal, 30)
+                        .padding(.vertical, 18)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: geometry.size.height, alignment: .center)
                 }
@@ -566,11 +665,11 @@ struct LicenseActivationView: View {
         VStack(alignment: .leading, spacing: 0) {
             systemHeader
             activityBanner
-                .padding(.top, 20)
+                .padding(.top, 14)
             activationContent
             sessionFooter
         }
-        .padding(20)
+        .padding(16)
         .background(
             Color(red: 0.095, green: 0.095, blue: 0.102),
             in: RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -584,8 +683,8 @@ struct LicenseActivationView: View {
     }
 
     private var systemHeader: some View {
-        HStack(spacing: 11) {
-            AppLogo(size: 36)
+        HStack(spacing: 8) {
+            AppLogo(size: 30)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("FAX AURA")
@@ -670,13 +769,13 @@ struct LicenseActivationView: View {
                         .foregroundStyle(.white.opacity(0.85))
 
                     Text("Enter your key")
-                        .font(.system(size: 29, weight: .black, design: .rounded))
+                        .font(.system(size: 25, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
 
                     Text("Unlock your private Fax Aura session.")
-                        .font(.system(size: 16, weight: .regular, design: .rounded))
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
                         .foregroundStyle(.white.opacity(0.54))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -692,7 +791,7 @@ struct LicenseActivationView: View {
                     .padding(.top, 31)
                     .accessibilityHidden(true)
             }
-            .padding(.top, 27)
+            .padding(.top, 18)
 
             HStack {
                 Text("ACCESS KEY")
@@ -702,13 +801,13 @@ struct LicenseActivationView: View {
             .font(.system(size: 10, weight: .bold, design: .monospaced))
             .tracking(1.05)
             .foregroundStyle(.white.opacity(0.66))
-            .padding(.top, 24)
+            .padding(.top, 17)
 
             keyEntry
                 .padding(.top, 9)
 
             initializeButton
-                .padding(.top, 20)
+                .padding(.top, 13)
 
             if let feedbackKey = messageKey ?? sessionNotice {
                 Label {
@@ -757,7 +856,7 @@ struct LicenseActivationView: View {
         }
         .padding(.horizontal, 15)
         .frame(maxWidth: .infinity)
-        .frame(height: 58)
+        .frame(height: 48)
         .background(Color.white.opacity(0.045), in: Capsule())
         .overlay {
             Capsule()
@@ -815,7 +914,7 @@ struct LicenseActivationView: View {
             .foregroundStyle(canActivate ? Color.black : Color.white.opacity(0.44))
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity)
-            .frame(height: 58)
+            .frame(height: 48)
             .background {
                 if canActivate {
                     RoundedRectangle(cornerRadius: 30, style: .continuous)
@@ -843,7 +942,7 @@ struct LicenseActivationView: View {
     }
 
     private var sessionFooter: some View {
-        VStack(spacing: 19) {
+        VStack(spacing: 13) {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.system(size: 15, weight: .semibold))
@@ -874,7 +973,7 @@ struct LicenseActivationView: View {
             }
             .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(.top, 27)
+        .padding(.top, 18)
     }
 
     private func submitActivation() {
