@@ -526,24 +526,24 @@ struct LicenseActivationView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.025, green: 0.027, blue: 0.035)
+            Color.black
                 .ignoresSafeArea()
             LinearGradient(
-                colors: [Color.black, Color(red: 0.095, green: 0.065, blue: 0.055), Color.black],
+                colors: [Color.black, Color(white: 0.09), Color.black],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
 
             Circle()
-                .fill(AppTheme.accent.opacity(0.15))
+                .fill(AppTheme.accent.opacity(0.11))
                 .frame(width: 300, height: 300)
                 .blur(radius: 90)
                 .offset(x: 120, y: -260)
                 .accessibilityHidden(true)
 
             ScrollView {
-                VStack(spacing: 22) {
+                VStack(spacing: 24) {
                     brandHeader
                     activationCard
                     footer
@@ -560,20 +560,24 @@ struct LicenseActivationView: View {
     }
 
     private var brandHeader: some View {
-        VStack(spacing: 15) {
-            HStack(spacing: 11) {
-                AppLogo(size: 48)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("3106")
-                        .font(.system(size: 18, weight: .black, design: .rounded))
-                        .tracking(1.4)
-                        .foregroundStyle(.white)
-                    Text(language.text("license.brand_subtitle"))
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .tracking(1.2)
-                        .foregroundStyle(.white.opacity(0.55))
-                }
-                Spacer()
+        VStack(spacing: 14) {
+            AppLogo(size: 88)
+
+            VStack(spacing: 4) {
+                Text("3106")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundStyle(.white)
+                Text(language.text("license.brand_subtitle"))
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+
+            HStack(spacing: 8) {
+                Rectangle()
+                    .fill(AppTheme.accent.opacity(0.42))
+                    .frame(width: 28, height: 1)
                 HStack(spacing: 6) {
                     Image(systemName: "lock.shield.fill")
                         .font(.system(size: 11, weight: .semibold))
@@ -586,6 +590,9 @@ struct LicenseActivationView: View {
                 .padding(.vertical, 8)
                 .background(.white.opacity(0.07), in: Capsule())
                 .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+                Rectangle()
+                    .fill(AppTheme.accent.opacity(0.42))
+                    .frame(width: 28, height: 1)
             }
 
             HStack(spacing: 8) {
@@ -598,9 +605,10 @@ struct LicenseActivationView: View {
                     .foregroundStyle(AppTheme.accent)
                 Rectangle()
                     .fill(AppTheme.accent.opacity(0.35))
-                    .frame(height: 1)
+                    .frame(width: 28, height: 1)
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var activationCard: some View {
@@ -653,7 +661,7 @@ struct LicenseActivationView: View {
             Button(action: submitActivation) {
                 HStack(spacing: 10) {
                     if isLoading {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(.black)
                     } else {
                         Image(systemName: "lock.open.fill")
                     }
@@ -665,20 +673,20 @@ struct LicenseActivationView: View {
                             .font(.system(size: 13, weight: .bold))
                     }
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.black)
                 .padding(.horizontal, 17)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
                 .background(
                     LinearGradient(
-                        colors: [AppTheme.accent, AppTheme.accent.opacity(0.76)],
+                        colors: [Color.white, Color(white: 0.68)],
                         startPoint: .leading,
                         endPoint: .trailing
                     ),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.white.opacity(0.20), lineWidth: 1))
-                .shadow(color: AppTheme.accent.opacity(0.26), radius: 16, y: 7)
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.white.opacity(0.40), lineWidth: 1))
+                .shadow(color: .white.opacity(0.18), radius: 16, y: 7)
             }
             .buttonStyle(.plain)
             .disabled(isLoading || key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -693,17 +701,17 @@ struct LicenseActivationView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption)
                 }
-                .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.58))
+                .foregroundStyle(.white.opacity(0.82))
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(AppTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.accent.opacity(0.22), lineWidth: 1))
+                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(.white.opacity(0.18), lineWidth: 1))
                 .accessibilityAddTraits(.updatesFrequently)
             }
 
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.shield.fill")
-                    .foregroundStyle(.green.opacity(0.9))
+                    .foregroundStyle(.white.opacity(0.82))
                 Text(language.text("license.privacy_note"))
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.52))
@@ -725,7 +733,7 @@ struct LicenseActivationView: View {
 
     private var footer: some View {
         HStack(spacing: 7) {
-            Circle().fill(.green.opacity(0.9)).frame(width: 6, height: 6)
+            Circle().fill(.white.opacity(0.72)).frame(width: 6, height: 6)
             Text(language.text("license.footer"))
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.42))
