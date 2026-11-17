@@ -21,6 +21,7 @@ struct PatchProjectsView: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var draftCoordinator: PatchDraftCoordinator
     @EnvironmentObject private var store: PatchProjectStore
+    @ObservedObject private var appLog = AppLog.shared
     @AppStorage(FeatureVisibility.cleanerStorageKey) private var cleanerEnabled = true
     @State private var showCreate = false
     @State private var showImporter = false
@@ -79,6 +80,226 @@ struct PatchProjectsView: View {
         !filteredItems.isEmpty
     }
 
+    private var totalRuleCount: Int {
+        store.items.reduce(0) { count, item in
+            guard item.canInspectContents, let project = item.project else { return count }
+            return count + project.rules.count
+        }
+    }
+
+    private var activeRuleCount: Int {
+        store.items.reduce(0) { count, item in
+            guard item.canInspectContents, let project = item.project else { return count }
+            if DevicePatchService.latestReceipt(projectID: item.id) != nil {
+                return count + project.rules.count
+            }
+            return count + project.rules.filter {
+                DevicePatchService.isRuleApplied(projectID: item.id, ruleID: $0.id)
+            }.count
+        }
+    }
+
+    private var consoleBrandHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("AURA CONSOLE")
+                    .font(.system(size: 17, weight: .black, design: .monospaced))
+                    .tracking(1.5)
+                    .foregroundStyle(.white)
+                Text(language.text("installed.online"))
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.6)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text("V\(AppInfo.appVersion)")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.white.opacity(0.38)))
+        }
+        .padding(.horizontal, 3)
+    }
+
+    private var faxAuraBanner: some View {
+        Image("ActivityHeaderArt")
+            .resizable()
+            .scaledToFill()
+            .frame(maxWidth: .infinity)
+            .frame(height: 100)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(.white.opacity(0.76), lineWidth: 1)
+            }
+            .accessibilityLabel("Fax Aura")
+    }
+
+    private var activityCard: some View {
+        Button(action: onOpenLogs) {
+            HStack(spacing: 12) {
+                Image(systemName: "waveform.path")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(Color.white.opacity(0.20), in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(language.text("installed.activity"))
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text(language.text("installed.ready_status"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .lineLimit(1)
+                    Text(appLog.entries.last ?? language.text("installed.no_recent_activity"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Circle()
+                    .fill(isModuleOperationInProgress ? Color.orange : Color.white)
+                    .frame(width: 9, height: 9)
+                    .shadow(color: .white.opacity(0.75), radius: 6)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 15))
+            .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(.white.opacity(0.72), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var moduleStatusPanel: some View {
+        HStack(spacing: 0) {
+            statusMetric(
+                symbol: "square.grid.2x2.fill",
+                value: "\(totalRuleCount)",
+                label: language.text("installed.modules")
+            )
+            statusDivider
+            statusMetric(
+                symbol: "dot.radiowaves.left.and.right",
+                value: "\(activeRuleCount)",
+                label: language.text("installed.active")
+            )
+            statusDivider
+            statusMetric(
+                symbol: "checkmark.shield.fill",
+                value: language.text("installed.safe"),
+                label: language.text("installed.mode")
+            )
+        }
+        .padding(.vertical, 11)
+        .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 13))
+        .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.white.opacity(0.26), lineWidth: 0.8))
+    }
+
+    private var statusDivider: some View {
+        Rectangle()
+            .fill(.white.opacity(0.20))
+            .frame(width: 1, height: 30)
+    }
+
+    private func statusMetric(symbol: String, value: String, label: String) -> some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(value)
+                    .font(.system(size: 12, weight: .black, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .foregroundStyle(.white)
+            Text(label.uppercased())
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .tracking(0.4)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var quickActions: some View {
+        HStack(spacing: 7) {
+            Button {
+                store.reload()
+            } label: {
+                quickActionLabel("installed.reload", symbol: "arrow.clockwise")
+            }
+            .disabled(store.isBusy || isModuleOperationInProgress)
+
+            Menu {
+                Button {
+                    showImporter = true
+                } label: {
+                    Label(language.text("patch.import"), systemImage: "square.and.arrow.down")
+                }
+                Button {
+                    showCreate = true
+                } label: {
+                    Label(language.text("patch.new"), systemImage: "doc.badge.plus")
+                }
+            } label: {
+                quickActionLabel("installed.import", symbol: "square.and.arrow.down")
+            }
+            .disabled(store.isBusy || isModuleOperationInProgress)
+
+            Button(action: onOpenSettings) {
+                quickActionLabel("settings.title", symbol: "gearshape")
+            }
+        }
+    }
+
+    private func quickActionLabel(_ key: String, symbol: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+            Text(language.text(key))
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .frame(height: 58)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.30), lineWidth: 0.8))
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var functionsHeading: some View {
+        HStack(alignment: .center, spacing: 9) {
+            Capsule()
+                .fill(.white)
+                .frame(width: 4, height: 38)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(language.text("installed.functions"))
+                    .font(.system(size: 22, weight: .black, design: .monospaced))
+                    .foregroundStyle(.white)
+                Text(language.text("installed.available"))
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(0.5)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 4)
+            Text(language.text("installed.active_total", Int64(activeRuleCount), Int64(totalRuleCount)))
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .frame(height: 36)
+                .background(Color.white.opacity(0.08), in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.45), lineWidth: 0.8))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.top, 4)
+    }
+
     init(
         onOpenSettings: @escaping () -> Void = {},
         onOpenLogs: @escaping () -> Void = {}
@@ -94,81 +315,45 @@ struct PatchProjectsView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                AuraConsoleHeader(
-                    title: language.text("home.card.patches"),
-                    subtitle: "PATCH CONTROL / MODULES",
-                    systemImage: "square.stack.3d.up.fill"
-                )
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    consoleBrandHeader
+                    faxAuraBanner
+                    activityCard
+                    moduleStatusPanel
+                    quickActions
+                    AppSearchField(
+                        text: $searchText,
+                        prompt: language.text("patch.search"),
+                        clearLabel: language.text("common.clear")
+                    )
+                    functionsHeading
 
-                AppSearchField(
-                    text: $searchText,
-                    prompt: language.text("patch.search"),
-                    clearLabel: language.text("common.clear")
-                )
-                Divider()
-                List {
                     if !hasLocalContent && store.isBusy {
                         loadingState
-                            .listRowSeparator(.hidden)
                     } else if !hasLocalContent {
                         emptyState
-                            .listRowSeparator(.hidden)
                     } else if !hasSearchResults && !store.isBusy {
                         searchEmptyState
-                            .listRowSeparator(.hidden)
                     } else {
-                        if !filteredItems.isEmpty {
-                            Section(language.text("patch.title")) {
-                                ForEach(filteredItems) { item in
-                                    itemRow(item)
-                                }
-                                .onDelete { offsets in
-                                    guard !isModuleOperationInProgress else { return }
-                                    offsets.map { filteredItems[$0] }.forEach(store.delete)
-                                }
-                            }
+                        ForEach(filteredItems) { item in
+                            itemRow(item)
                         }
                     }
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-                .background(AppTheme.pageBackground)
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 24)
             }
             .background(AppTheme.pageBackground.ignoresSafeArea())
-            .navigationTitle("")
+            .navigationTitle(language.text("tab.installed"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: onOpenSettings) {
-                        Image(systemName: "gearshape.fill")
-                    }
-                    .accessibilityLabel(language.text("settings.title"))
-                }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button {
-                            showCreate = true
-                        } label: {
-                            Label(language.text("patch.new"), systemImage: "doc.badge.plus")
-                        }
-                        Button {
-                            showImporter = true
-                        } label: {
-                            Label(language.text("patch.import"), systemImage: "square.and.arrow.down")
-                        }
-                    } label: {
-                        if store.isBusy {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "plus")
-                        }
+                    Button(action: onOpenLogs) {
+                        Image(systemName: "waveform.path")
                     }
-                    .disabled(store.isBusy || isModuleOperationInProgress)
-                    .accessibilityLabel(language.text("patch.add"))
+                    .accessibilityLabel(language.text("logs.title"))
                 }
             }
             .sheet(isPresented: $showImporter) {
@@ -385,49 +570,102 @@ struct PatchProjectsView: View {
     private func itemRow(_ item: PatchLibraryItem) -> some View {
         if item.isLocked {
             Button { store.requestUnlock(for: item) } label: {
-                PatchProjectRow(item: item, language: language)
+                projectCard(item)
             }
             .buttonStyle(.plain)
-            .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-        } else {
-            HStack(spacing: 8) {
-                NavigationLink {
-                    PatchProjectDetailView(store: store, projectID: item.id)
-                } label: {
-                    PatchProjectRow(item: item, language: language)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-
-                projectModuleControls(item)
+            .contextMenu { deleteMenu(item) }
+        } else if let project = item.project,
+                  item.canInspectContents,
+                  !project.rules.isEmpty {
+            ForEach(project.rules) { rule in
+                moduleFunctionRow(item: item, project: project, rule: rule)
+                    .contextMenu { deleteMenu(item) }
             }
-            .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+        } else {
+            NavigationLink {
+                PatchProjectDetailView(store: store, projectID: item.id)
+            } label: {
+                projectCard(item)
+            }
+            .buttonStyle(.plain)
+            .contextMenu { deleteMenu(item) }
         }
     }
 
-    @ViewBuilder
-    private func projectModuleControls(_ item: PatchLibraryItem) -> some View {
-        if let project = item.project,
-           item.canInspectContents,
-           !project.rules.isEmpty {
-            VStack(spacing: 5) {
-                ForEach(project.rules) { rule in
-                    PatchModuleToggle(
-                        item: item,
-                        project: project,
-                        rule: rule,
-                        storeIsBusy: store.isBusy,
-                        appIsBusy: $isModuleOperationInProgress,
-                        onUpdate: store.reload
-                    )
+    private func moduleFunctionRow(
+        item: PatchLibraryItem,
+        project: PatchProject,
+        rule: PatchRule
+    ) -> some View {
+        HStack(spacing: 9) {
+            Capsule()
+                .fill(.white)
+                .frame(width: 3, height: 62)
+            NavigationLink {
+                PatchProjectDetailView(store: store, projectID: item.id)
+            } label: {
+                HStack(spacing: 10) {
+                    AppLogo(size: 48)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(rule.replacementFilename.isEmpty ? project.name : rule.replacementFilename)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(project.name)
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Text(rule.relativePath)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.secondary.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .contentShape(Rectangle())
             }
-            .frame(width: 104)
+            .buttonStyle(.plain)
+
+            PatchModuleToggle(
+                item: item,
+                project: project,
+                rule: rule,
+                storeIsBusy: store.isBusy,
+                appIsBusy: $isModuleOperationInProgress,
+                onUpdate: store.reload
+            )
         }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 82)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.075), Color.white.opacity(0.025), Color.black.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(.white.opacity(0.34), lineWidth: 0.8)
+        }
+    }
+
+    private func projectCard(_ item: PatchLibraryItem) -> some View {
+        PatchProjectRow(item: item, language: language)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func deleteMenu(_ item: PatchLibraryItem) -> some View {
+        Button(role: .destructive) {
+            guard !isModuleOperationInProgress else { return }
+            store.delete(item)
+        } label: {
+            Label(language.text("common.delete"), systemImage: "trash")
+        }
+        .disabled(isModuleOperationInProgress)
     }
 
     private var emptyState: some View {
@@ -637,17 +875,9 @@ private struct PatchModuleToggle: View {
                 ? "patch.module_running"
                 : "patch.module_ready"))
         }
-        .padding(.horizontal, 3)
-        .padding(.vertical, 6)
-        .frame(width: 104)
-        .background(
-            Color.white.opacity(0.055),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.7)
-        }
+        .padding(.horizontal, 1)
+        .padding(.vertical, 2)
+        .frame(width: 92)
         .confirmationDialog(
             language.text("patch.restore_changed_title"),
             isPresented: $showChangedRestoreConfirmation,
