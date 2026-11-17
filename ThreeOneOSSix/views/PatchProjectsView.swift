@@ -561,8 +561,6 @@ private struct PatchModuleToggle: View {
     @Binding var appIsBusy: Bool
     let onUpdate: () -> Void
 
-    @State private var showStartConfirmation = false
-    @State private var showStopConfirmation = false
     @State private var showChangedRestoreConfirmation = false
     @State private var isWorking = false
     @State private var changedPaths: [String] = []
@@ -652,28 +650,6 @@ private struct PatchModuleToggle: View {
                 .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.7)
         }
         .confirmationDialog(
-            language.text("patch.module_start_title"),
-            isPresented: $showStartConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(language.text("patch.module_start")) { applyRule() }
-            Button(language.text("common.cancel"), role: .cancel) { cancelPendingAction() }
-        } message: {
-            Text(language.text("patch.module_start_message"))
-        }
-        .confirmationDialog(
-            language.text("patch.module_stop_title"),
-            isPresented: $showStopConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(language.text("patch.module_stop"), role: .destructive) {
-                prepareRestore()
-            }
-            Button(language.text("common.cancel"), role: .cancel) { cancelPendingAction() }
-        } message: {
-            Text(language.text("patch.module_stop_message"))
-        }
-        .confirmationDialog(
             language.text("patch.restore_changed_title"),
             isPresented: $showChangedRestoreConfirmation,
             titleVisibility: .visible
@@ -685,8 +661,6 @@ private struct PatchModuleToggle: View {
         } message: {
             Text(changedRestoreMessage)
         }
-        .onChange(of: showStartConfirmation) { _ in releaseBusyIfIdle() }
-        .onChange(of: showStopConfirmation) { _ in releaseBusyIfIdle() }
         .onChange(of: showChangedRestoreConfirmation) { _ in releaseBusyIfIdle() }
         .alert(item: $alert) { alert in
             Alert(
@@ -702,24 +676,19 @@ private struct PatchModuleToggle: View {
               !hasUnclassifiedTransaction, enabled != isActive else { return }
         appIsBusy = true
         if enabled {
-            showStartConfirmation = true
+            applyRule()
         } else {
-            showStopConfirmation = true
+            prepareRestore()
         }
     }
 
     private func cancelPendingAction() {
-        showStartConfirmation = false
-        showStopConfirmation = false
         showChangedRestoreConfirmation = false
         appIsBusy = false
     }
 
     private func releaseBusyIfIdle() {
-        guard !isWorking,
-              !showStartConfirmation,
-              !showStopConfirmation,
-              !showChangedRestoreConfirmation else { return }
+        guard !isWorking, !showChangedRestoreConfirmation else { return }
         appIsBusy = false
     }
 
