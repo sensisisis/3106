@@ -150,23 +150,36 @@ struct PatchProjectsView: View {
                 paused: false
             )
         ) { timeline in
-            let lapDuration = reduceMotion ? 5.4 : 2.2
+            let lapDuration = reduceMotion ? 5.4 : 2.0
             let progress = timeline.date.timeIntervalSinceReferenceDate
                 .truncatingRemainder(dividingBy: lapDuration) / lapDuration
+            let cyanGlow = Color(red: 0.48, green: 0.86, blue: 1.0)
             ZStack {
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .inset(by: 1.8)
-                    .stroke(Color.gray.opacity(0.30), lineWidth: 0.9)
-                activityOrbitSegments(
+                    .stroke(Color.gray.opacity(0.24), lineWidth: 0.8)
+                activityOrbitStroke(
                     progress: progress,
-                    segmentLength: reduceMotion ? 0.15 : 0.28
+                    segmentLength: reduceMotion ? 0.16 : 0.19,
+                    color: cyanGlow.opacity(0.24),
+                    lineWidth: reduceMotion ? 3.8 : 4.8
                 )
-                if !reduceMotion {
-                    activityOrbitSegments(
-                        progress: (progress + 0.52).truncatingRemainder(dividingBy: 1),
-                        segmentLength: 0.08
-                    )
-                }
+                .shadow(color: cyanGlow.opacity(0.72), radius: reduceMotion ? 5 : 9)
+                activityOrbitStroke(
+                    progress: (progress + 0.05).truncatingRemainder(dividingBy: 1),
+                    segmentLength: reduceMotion ? 0.10 : 0.13,
+                    color: cyanGlow.opacity(0.62),
+                    lineWidth: 2.8
+                )
+                .shadow(color: cyanGlow.opacity(0.84), radius: 6)
+                activityOrbitStroke(
+                    progress: (progress + (reduceMotion ? 0.11 : 0.14))
+                        .truncatingRemainder(dividingBy: 1),
+                    segmentLength: reduceMotion ? 0.04 : 0.05,
+                    color: .white,
+                    lineWidth: 2.1
+                )
+                .shadow(color: cyanGlow.opacity(0.98), radius: 7)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -174,68 +187,27 @@ struct PatchProjectsView: View {
         .accessibilityHidden(true)
     }
 
-    private func activityOrbitSegments(progress: Double, segmentLength: Double) -> some View {
-        let start = CGFloat(progress)
+    private func activityOrbitStroke(
+        progress: Double,
+        segmentLength: Double,
+        color: Color,
+        lineWidth: CGFloat
+    ) -> some View {
+        let start = CGFloat(progress.truncatingRemainder(dividingBy: 1))
         let end = start + CGFloat(segmentLength)
-        let metallicGradient = AngularGradient(
-            colors: [
-                Color(white: 0.30),
-                Color(white: 0.72),
-                .white,
-                Color(white: 0.48),
-                .white,
-                Color(white: 0.36)
-            ],
-            center: .center,
-            startAngle: .degrees(progress * 360),
-            endAngle: .degrees(progress * 360 + 360)
-        )
+        let strokeStyle = StrokeStyle(lineWidth: lineWidth, lineCap: .round)
 
         return ZStack {
-            activityOrbitArc(from: start, to: min(end, 1), gradient: metallicGradient)
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .inset(by: 1.8)
+                .trim(from: start, to: min(end, 1))
+                .stroke(color, style: strokeStyle)
             if end > 1 {
-                activityOrbitArc(from: 0, to: end - 1, gradient: metallicGradient)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .inset(by: 1.8)
+                    .trim(from: 0, to: end - 1)
+                    .stroke(color, style: strokeStyle)
             }
-        }
-    }
-
-    private func activityOrbitArc(
-        from start: CGFloat,
-        to end: CGFloat,
-        gradient: AngularGradient
-    ) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .inset(by: 2.1)
-                .trim(from: start, to: end)
-                .stroke(
-                    Color.black.opacity(0.82),
-                    style: StrokeStyle(lineWidth: 5.4, lineCap: .round)
-                )
-                .offset(y: 0.8)
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .inset(by: 2.1)
-                .trim(from: start, to: end)
-                .stroke(
-                    Color.gray.opacity(0.9),
-                    style: StrokeStyle(lineWidth: 4.2, lineCap: .round)
-                )
-                .shadow(color: Color.gray.opacity(0.95), radius: 7)
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .inset(by: 2.1)
-                .trim(from: start, to: end)
-                .stroke(
-                    gradient,
-                    style: StrokeStyle(lineWidth: 3.1, lineCap: .round)
-                )
-                .shadow(color: .white.opacity(0.88), radius: 4)
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .inset(by: 3.6)
-                .trim(from: start, to: end)
-                .stroke(
-                    .white.opacity(0.92),
-                    style: StrokeStyle(lineWidth: 0.8, lineCap: .round)
-                )
         }
     }
 
