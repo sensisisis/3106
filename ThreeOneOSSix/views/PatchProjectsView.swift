@@ -134,7 +134,29 @@ struct PatchProjectsView: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .strokeBorder(.white.opacity(0.32), lineWidth: 0.8)
+                    .strokeBorder(Color.gray.opacity(0.22), lineWidth: 0.8)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(
+                        AngularGradient(
+                            gradient: Gradient(colors: [
+                                .clear,
+                                Color.gray.opacity(0.18),
+                                Color.gray.opacity(0.92),
+                                Color.gray.opacity(0.42),
+                                .clear
+                            ]),
+                            center: .center,
+                            startAngle: .degrees(activityOrbitDegrees),
+                            endAngle: .degrees(activityOrbitDegrees + 360)
+                        ),
+                        lineWidth: 1.25
+                    )
+                    .animation(
+                        reduceMotion ? nil : .linear(duration: 2.4).repeatForever(autoreverses: false),
+                        value: activityOrbitDegrees
+                    )
             }
             .shadow(color: .black.opacity(0.32), radius: 8, y: 3)
         }
@@ -152,30 +174,8 @@ struct PatchProjectsView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
                 .accessibilityHidden(true)
-            Circle()
-                .stroke(
-                    AngularGradient(
-                        gradient: Gradient(colors: [
-                            .clear,
-                            Color.white.opacity(0.12),
-                            Color.white,
-                            Color.white.opacity(0.28),
-                            .clear
-                        ]),
-                        center: .center,
-                        startAngle: .degrees(activityOrbitDegrees),
-                        endAngle: .degrees(activityOrbitDegrees + 360)
-                    ),
-                    lineWidth: 1.3
-                )
-                .shadow(color: .white.opacity(0.48), radius: 4)
-                .frame(width: 36, height: 36)
-                .animation(
-                    reduceMotion ? nil : .linear(duration: 2.4).repeatForever(autoreverses: false),
-                    value: activityOrbitDegrees
-                )
         }
-        .frame(width: 36, height: 36)
+        .frame(width: 30, height: 30)
     }
 
     private var moduleStatusPanel: some View {
@@ -573,13 +573,8 @@ struct PatchProjectsView: View {
                     .contextMenu { deleteMenu(item) }
             }
         } else {
-            NavigationLink {
-                PatchProjectDetailView(store: store, projectID: item.id)
-            } label: {
-                projectCard(item)
-            }
-            .buttonStyle(.plain)
-            .contextMenu { deleteMenu(item) }
+            projectCard(item)
+                .contextMenu { deleteMenu(item) }
         }
     }
 
@@ -592,47 +587,41 @@ struct PatchProjectsView: View {
             Capsule()
                 .fill(.white)
                 .frame(width: 3, height: 48)
-            NavigationLink {
-                PatchProjectDetailView(store: store, projectID: item.id)
-            } label: {
-                HStack(spacing: 8) {
-                    Image("ActivityHeaderArt")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 54, height: 31)
-                        .padding(2)
-                        .background(Color.black, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(.white.opacity(0.42), lineWidth: 0.7)
-                        }
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(project.name)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
-                        if !rule.replacementFilename.isEmpty,
-                           rule.replacementFilename != project.name {
-                            Text(rule.replacementFilename)
-                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        Text(rule.relativePath)
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(.secondary.opacity(0.85))
+            HStack(spacing: 8) {
+                Image("ActivityHeaderArt")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 54, height: 31)
+                    .padding(2)
+                    .background(Color.black, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(.white.opacity(0.42), lineWidth: 0.7)
+                    }
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(project.name)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                    if !rule.replacementFilename.isEmpty,
+                       rule.replacementFilename != project.name {
+                        Text(rule.replacementFilename)
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(rule.relativePath)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.secondary.opacity(0.85))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
 
             PatchModuleToggle(
                 item: item,
