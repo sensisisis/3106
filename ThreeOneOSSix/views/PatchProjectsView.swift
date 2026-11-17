@@ -28,7 +28,6 @@ struct PatchProjectsView: View {
     @State private var showImporter = false
     @State private var showWallpaperImporter = false
     @State private var showCleaner = false
-    @State private var activityOrbitDegrees = 0.0
     @State private var wallpaperPackages: [WallpaperStagedPackage] = []
     @State private var wallpaperImportFeedback: WallpaperImportFeedback?
     @State private var wallpaperPendingDeletion: WallpaperStagedPackage?
@@ -137,35 +136,48 @@ struct PatchProjectsView: View {
                     .strokeBorder(Color.gray.opacity(0.22), lineWidth: 0.8)
             }
             .overlay {
-                AngularGradient(
-                    gradient: Gradient(colors: [
-                        .clear,
-                        Color.gray.opacity(0.18),
-                        Color.gray.opacity(0.92),
-                        Color.gray.opacity(0.42),
-                        .clear
-                    ]),
-                    center: .center,
-                    startAngle: .degrees(0),
-                    endAngle: .degrees(360)
-                )
-                .rotationEffect(.degrees(activityOrbitDegrees))
-                .mask {
-                    RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .stroke(.white, lineWidth: 1.25)
-                }
-                .shadow(color: Color.gray.opacity(0.42), radius: 3)
-                .animation(
-                    reduceMotion ? nil : .linear(duration: 2.4).repeatForever(autoreverses: false),
-                    value: activityOrbitDegrees
-                )
+                activityOrbitMotion
             }
             .shadow(color: .black.opacity(0.32), radius: 8, y: 3)
         }
         .buttonStyle(.plain)
-        .onAppear {
-            activityOrbitDegrees = reduceMotion ? 0 : 360
+    }
+
+    private var activityOrbitMotion: some View {
+        TimelineView(
+            .animation(
+                minimumInterval: reduceMotion ? 0.08 : 1.0 / 30.0,
+                paused: false
+            )
+        ) { timeline in
+            let lapDuration = reduceMotion ? 5.4 : 2.4
+            let progress = timeline.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: lapDuration) / lapDuration
+            activityOrbitSegments(
+                progress: progress,
+                segmentLength: reduceMotion ? 0.14 : 0.23
+            )
         }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func activityOrbitSegments(progress: Double, segmentLength: Double) -> some View {
+        let start = CGFloat(progress)
+        let end = start + CGFloat(segmentLength)
+        let style = StrokeStyle(lineWidth: reduceMotion ? 1.5 : 2.2, lineCap: .round)
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .trim(from: start, to: min(end, 1))
+                .stroke(Color.gray.opacity(0.96), style: style)
+            if end > 1 {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .trim(from: 0, to: end - 1)
+                    .stroke(Color.gray.opacity(0.96), style: style)
+            }
+        }
+        .shadow(color: Color.gray.opacity(0.76), radius: reduceMotion ? 2.5 : 5)
     }
 
     private var activityLogIcon: some View {
@@ -789,36 +801,43 @@ private struct PatchModuleToggle: View {
     }
 
     var body: some View {
-        VStack(spacing: 2) {
-            Text(language.text("patch.module_start"))
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .foregroundStyle(AppTheme.accent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Text(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
-                .font(.system(size: 7, weight: .bold, design: .monospaced))
-                .foregroundStyle(isActive ? Color.green : Color.secondary)
-                .lineLimit(1)
-            Toggle(isOn: Binding(
-                get: { isActive },
-                set: { requestToggle(enabled: $0) }
-            )) {
-                EmptyView()
+        Button {
+            requestToggle(enabled: !isActive)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isActive ? "checkmark.circle.fill" : "bolt.fill")
+                    .font(.system(size: 11, weight: .bold))
+                Text(language.text(isActive ? "patch.module_running" : "patch.module_start"))
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
-            .labelsHidden()
-            .tint(.green)
-            .scaleEffect(0.74)
-            .disabled(
-                appIsBusy || storeIsBusy || legacyReceipt != nil || hasUnclassifiedTransaction
+            .foregroundStyle(isActive ? Color.black : Color.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 34)
+            .background(
+                isActive ? Color.green : Color.white.opacity(0.08),
+                in: Capsule()
             )
-            .accessibilityLabel(rule.relativePath)
-            .accessibilityValue(language.text(isActive
-                ? "patch.module_running"
-                : "patch.module_ready"))
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        isActive ? Color.green.opacity(0.95) : Color.gray.opacity(0.48),
+                        lineWidth: 0.9
+                    )
+            }
+            .shadow(color: isActive ? Color.green.opacity(0.25) : .clear, radius: 4)
+            .animation(.easeInOut(duration: 0.16), value: isActive)
         }
-        .padding(.horizontal, 1)
-        .padding(.vertical, 1)
-        .frame(width: 82)
+        .buttonStyle(.plain)
+        .disabled(
+            appIsBusy || storeIsBusy || legacyReceipt != nil || hasUnclassifiedTransaction
+        )
+        .accessibilityLabel(
+            "\(project.name), \(language.text(isActive ? "patch.module_running" : "patch.module_start"))"
+        )
+        .accessibilityValue(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
+        .frame(width: 104)
         .confirmationDialog(
             language.text("patch.restore_changed_title"),
             isPresented: $showChangedRestoreConfirmation,
