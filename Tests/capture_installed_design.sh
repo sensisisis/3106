@@ -13,7 +13,12 @@ r.sort(key=lambda r: tuple(int(x) for x in r["version"].split(".")))
 print(r[-1]["identifier"])
 ')
 DEVICE=$(xcrun simctl create "Installed Fax Aura UI" "com.apple.CoreSimulator.SimDeviceType.iPhone-11" "$RUNTIME")
+VIDEO_PID=''
 cleanup() {
+  if [[ -n "$VIDEO_PID" ]]; then
+    kill -INT "$VIDEO_PID" >/dev/null 2>&1 || true
+    wait "$VIDEO_PID" >/dev/null 2>&1 || true
+  fi
   xcrun simctl shutdown "$DEVICE" >/dev/null 2>&1 || true
   xcrun simctl delete "$DEVICE" >/dev/null 2>&1 || true
 }
@@ -44,6 +49,14 @@ sleep 5
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/installed-four-modules.png"
 sleep 0.4
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/activity-orbit-next-frame.png"
+echo 'Recording the real silver orbit for motion-quality review'
+xcrun simctl io "$DEVICE" recordVideo --codec=h264 "$OUTPUT/activity-silver-orbit.mp4" > "$OUTPUT/recording.log" 2>&1 &
+VIDEO_PID=$!
+sleep 6
+kill -INT "$VIDEO_PID"
+wait "$VIDEO_PID" || true
+VIDEO_PID=''
+[[ -s "$OUTPUT/activity-silver-orbit.mp4" ]]
 xcrun simctl terminate "$DEVICE" "$BUNDLE"
 echo 'Capturing single-row design matching the reported layout'
 xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design --simulate-installed-single

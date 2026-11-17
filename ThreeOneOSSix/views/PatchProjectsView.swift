@@ -219,40 +219,42 @@ struct PatchProjectsView: View {
     private var activityOrbitMotion: some View {
         TimelineView(
             .animation(
-                minimumInterval: reduceMotion ? 0.08 : 1.0 / 30.0,
-                paused: false
+                minimumInterval: 1.0 / 60.0,
+                paused: reduceMotion
             )
         ) { timeline in
-            let lapDuration = reduceMotion ? 5.4 : 2.0
-            let progress = timeline.date.timeIntervalSinceReferenceDate
-                .truncatingRemainder(dividingBy: lapDuration) / lapDuration
-            let cyanGlow = Color(red: 0.48, green: 0.86, blue: 1.0)
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .inset(by: 1.8)
-                    .stroke(Color.gray.opacity(0.24), lineWidth: 0.8)
-                activityOrbitStroke(
-                    progress: progress,
-                    segmentLength: reduceMotion ? 0.16 : 0.19,
-                    color: cyanGlow.opacity(0.24),
-                    lineWidth: reduceMotion ? 3.8 : 4.8
+            // Constant perimeter speed, one clockwise lap every two seconds.
+            // Reduced Motion keeps a stationary silver highlight, not a slower loop.
+            let progress = reduceMotion ? 0.18 : timeline.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: 2.0) / 2.0
+            Canvas(opaque: false, colorMode: .linear, rendersAsynchronously: true) { context, size in
+                let bounds = CGRect(origin: .zero, size: size).insetBy(dx: 1.6, dy: 1.6)
+                let perimeter = RoundedRectangle(cornerRadius: 10.4, style: .continuous)
+                    .path(in: bounds)
+                context.stroke(
+                    perimeter,
+                    with: .color(Color(white: 0.32).opacity(0.38)),
+                    lineWidth: 0.7
                 )
-                .shadow(color: cyanGlow.opacity(0.72), radius: reduceMotion ? 5 : 9)
-                activityOrbitStroke(
-                    progress: (progress + 0.05).truncatingRemainder(dividingBy: 1),
-                    segmentLength: reduceMotion ? 0.10 : 0.13,
-                    color: cyanGlow.opacity(0.62),
-                    lineWidth: 2.8
+                // Blur the complete trail in one compositing layer; no colored glow.
+                context.drawLayer { halo in
+                    halo.addFilter(.blur(radius: reduceMotion ? 2.5 : 4.0))
+                    drawActivitySilverTrail(
+                        context: &halo, perimeter: perimeter, progress: progress, halo: true
+                    )
+                }
+                drawActivitySilverTrail(
+                    context: &context, perimeter: perimeter, progress: progress, halo: false
                 )
-                .shadow(color: cyanGlow.opacity(0.84), radius: 6)
-                activityOrbitStroke(
-                    progress: (progress + (reduceMotion ? 0.11 : 0.14))
-                        .truncatingRemainder(dividingBy: 1),
-                    segmentLength: reduceMotion ? 0.04 : 0.05,
-                    color: .white,
-                    lineWidth: 2.1
+                // Thin polished highlight: dimensional, without a broad white bar.
+                let glint = activityOrbitSegment(
+                    perimeter: perimeter, start: progress + 0.184, length: 0.016
                 )
-                .shadow(color: cyanGlow.opacity(0.98), radius: 7)
+                context.stroke(
+                    glint,
+                    with: .color(Color(white: 0.92).opacity(0.92)),
+                    style: StrokeStyle(lineWidth: 0.85, lineCap: .round)
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -260,28 +262,43 @@ struct PatchProjectsView: View {
         .accessibilityHidden(true)
     }
 
-    private func activityOrbitStroke(
+    private func drawActivitySilverTrail(
+        context: inout GraphicsContext,
+        perimeter: Path,
         progress: Double,
-        segmentLength: Double,
-        color: Color,
-        lineWidth: CGFloat
-    ) -> some View {
-        let start = CGFloat(progress.truncatingRemainder(dividingBy: 1))
-        let end = start + CGFloat(segmentLength)
-        let strokeStyle = StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-
-        return ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .inset(by: 1.8)
-                .trim(from: start, to: min(end, 1))
-                .stroke(color, style: strokeStyle)
-            if end > 1 {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .inset(by: 1.8)
-                    .trim(from: 0, to: end - 1)
-                    .stroke(color, style: strokeStyle)
-            }
+        halo: Bool
+    ) {
+        // Small overlapping samples yield a smooth graphite-to-silver fade,
+        // including at the path's closing seam, without a large SwiftUI view tree.
+        let samples = 36
+        let step = 0.20 / Double(samples)
+        for index in 0..<samples {
+            let intensity = Double(index + 1) / Double(samples)
+            let fade = pow(intensity, 1.7)
+            let segment = activityOrbitSegment(
+                perimeter: perimeter,
+                start: progress + Double(index) * step,
+                length: step + 0.00015
+            )
+            let shade = halo ? 0.66 : 0.36 + 0.50 * intensity
+            let opacity = halo ? 0.32 * fade : 0.04 + 0.88 * fade
+            context.stroke(
+                segment,
+                with: .color(Color(white: shade).opacity(opacity)),
+                style: StrokeStyle(lineWidth: halo ? 5.2 : 1.9, lineCap: halo ? .round : .butt)
+            )
         }
+    }
+
+    private func activityOrbitSegment(perimeter: Path, start: Double, length: Double) -> Path {
+        let fraction = start.truncatingRemainder(dividingBy: 1.0)
+        let from = CGFloat(fraction < 0 ? fraction + 1.0 : fraction)
+        let to = from + CGFloat(length)
+        var segment = perimeter.trimmedPath(from: from, to: min(to, 1.0))
+        if to > 1.0 + 0.0000001 {
+            segment.addPath(perimeter.trimmedPath(from: 0, to: to - 1.0))
+        }
+        return segment
     }
 
     private var activityLogIcon: some View {
