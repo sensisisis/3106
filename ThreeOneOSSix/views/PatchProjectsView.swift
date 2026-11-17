@@ -61,44 +61,6 @@ struct PatchProjectsView: View {
         }
     }
 
-    private var consoleBrandHeader: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("AURA CONSOLE")
-                    .font(.system(size: 17, weight: .black, design: .monospaced))
-                    .tracking(1.5)
-                    .foregroundStyle(.white)
-                Text(language.text("installed.online"))
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(0.6)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text("V\(AppInfo.appVersion)")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
-                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.white.opacity(0.38)))
-        }
-        .padding(.horizontal, 3)
-    }
-
-    private var faxAuraBanner: some View {
-        Image("ActivityHeaderArt")
-            .resizable()
-            .scaledToFill()
-            .frame(maxWidth: .infinity)
-            .frame(height: 100)
-            .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(.white.opacity(0.76), lineWidth: 1)
-            }
-            .accessibilityLabel("Fax Aura")
-    }
-
     private var activityCard: some View {
         Button(action: onOpenLogs) {
             HStack(spacing: 9) {
@@ -123,17 +85,10 @@ struct PatchProjectsView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [Color.white.opacity(0.09), Color.white.opacity(0.025), Color.black.opacity(0.18)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 15, style: .continuous)
-            )
+            .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .strokeBorder(Color.gray.opacity(0.22), lineWidth: 0.8)
+                    .strokeBorder(Color.gray.opacity(0.30), lineWidth: 0.8)
             }
             .overlay {
                 activityOrbitMotion
@@ -146,38 +101,62 @@ struct PatchProjectsView: View {
     private var activityOrbitMotion: some View {
         TimelineView(
             .animation(
-                minimumInterval: reduceMotion ? 0.08 : 1.0 / 30.0,
+                minimumInterval: reduceMotion ? 0.08 : 1.0 / 60.0,
                 paused: false
             )
         ) { timeline in
-            let lapDuration = reduceMotion ? 5.4 : 2.4
+            let lapDuration = reduceMotion ? 4.5 : 1.8
             let progress = timeline.date.timeIntervalSinceReferenceDate
                 .truncatingRemainder(dividingBy: lapDuration) / lapDuration
-            activityOrbitSegments(
-                progress: progress,
-                segmentLength: reduceMotion ? 0.14 : 0.23
-            )
+            ZStack {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .inset(by: 1.8)
+                    .stroke(Color.gray.opacity(0.32), lineWidth: 1)
+                activityOrbitSegments(
+                    progress: progress,
+                    segmentLength: reduceMotion ? 0.18 : 0.30,
+                    lineWidth: reduceMotion ? 1.8 : 3.2,
+                    opacity: 1
+                )
+                if !reduceMotion {
+                    activityOrbitSegments(
+                        progress: (progress + 0.52).truncatingRemainder(dividingBy: 1),
+                        segmentLength: 0.09,
+                        lineWidth: 2.2,
+                        opacity: 0.72
+                    )
+                }
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    private func activityOrbitSegments(progress: Double, segmentLength: Double) -> some View {
+    private func activityOrbitSegments(
+        progress: Double,
+        segmentLength: Double,
+        lineWidth: CGFloat,
+        opacity: Double
+    ) -> some View {
         let start = CGFloat(progress)
         let end = start + CGFloat(segmentLength)
-        let style = StrokeStyle(lineWidth: reduceMotion ? 1.5 : 2.2, lineCap: .round)
+        let style = StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+        let orbitColor = Color(white: 0.84)
 
         return ZStack {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .inset(by: 1.8)
                 .trim(from: start, to: min(end, 1))
-                .stroke(Color.gray.opacity(0.96), style: style)
+                .stroke(orbitColor.opacity(opacity), style: style)
             if end > 1 {
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .inset(by: 1.8)
                     .trim(from: 0, to: end - 1)
-                    .stroke(Color.gray.opacity(0.96), style: style)
+                    .stroke(orbitColor.opacity(opacity), style: style)
             }
         }
-        .shadow(color: Color.gray.opacity(0.76), radius: reduceMotion ? 2.5 : 5)
+        .shadow(color: orbitColor.opacity(opacity * 0.85), radius: reduceMotion ? 3 : 7)
     }
 
     private var activityLogIcon: some View {
@@ -337,8 +316,6 @@ struct PatchProjectsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    consoleBrandHeader
-                    faxAuraBanner
                     activityCard
                     moduleStatusPanel
                     quickActions
