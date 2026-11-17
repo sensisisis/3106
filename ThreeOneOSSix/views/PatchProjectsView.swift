@@ -563,6 +563,7 @@ private struct PatchModuleToggle: View {
 
     @State private var showChangedRestoreConfirmation = false
     @State private var isWorking = false
+    @State private var pendingActiveState: Bool?
     @State private var changedPaths: [String] = []
     @State private var alert: PatchStoreAlert?
 
@@ -570,11 +571,15 @@ private struct PatchModuleToggle: View {
         DevicePatchService.latestReceipt(projectID: item.id)
     }
 
-    private var isActive: Bool {
+    private var isPersistentlyActive: Bool {
         legacyReceipt != nil || DevicePatchService.isRuleApplied(
             projectID: project.id,
             ruleID: rule.id
         )
+    }
+
+    private var isActive: Bool {
+        pendingActiveState ?? isPersistentlyActive
     }
 
     private var hasUnclassifiedTransaction: Bool {
@@ -615,28 +620,22 @@ private struct PatchModuleToggle: View {
                 .font(.system(size: 8, weight: .bold, design: .monospaced))
                 .foregroundStyle(isActive ? Color.green : Color.secondary)
                 .lineLimit(1)
-            if isWorking {
-                ProgressView()
-                    .controlSize(.mini)
-                    .frame(height: 23)
-            } else {
-                Toggle(isOn: Binding(
-                    get: { isActive },
-                    set: { requestToggle(enabled: $0) }
-                )) {
-                    EmptyView()
-                }
-                .labelsHidden()
-                .tint(.green)
-                .scaleEffect(0.82)
-                .disabled(
-                    appIsBusy || storeIsBusy || legacyReceipt != nil || hasUnclassifiedTransaction
-                )
-                .accessibilityLabel(rule.relativePath)
-                .accessibilityValue(language.text(isActive
-                    ? "patch.module_running"
-                    : "patch.module_ready"))
+            Toggle(isOn: Binding(
+                get: { isActive },
+                set: { requestToggle(enabled: $0) }
+            )) {
+                EmptyView()
             }
+            .labelsHidden()
+            .tint(.green)
+            .scaleEffect(0.82)
+            .disabled(
+                appIsBusy || storeIsBusy || legacyReceipt != nil || hasUnclassifiedTransaction
+            )
+            .accessibilityLabel(rule.relativePath)
+            .accessibilityValue(language.text(isActive
+                ? "patch.module_running"
+                : "patch.module_ready"))
         }
         .padding(.horizontal, 3)
         .padding(.vertical, 6)
@@ -661,6 +660,9 @@ private struct PatchModuleToggle: View {
         } message: {
             Text(changedRestoreMessage)
         }
+        .onChange(of: isWorking) { working in
+            if !working { releaseBusyIfIdle() }
+        }
         .onChange(of: showChangedRestoreConfirmation) { _ in releaseBusyIfIdle() }
         .alert(item: $alert) { alert in
             Alert(
@@ -673,8 +675,9 @@ private struct PatchModuleToggle: View {
 
     private func requestToggle(enabled: Bool) {
         guard !appIsBusy, !storeIsBusy, !isWorking, legacyReceipt == nil,
-              !hasUnclassifiedTransaction, enabled != isActive else { return }
+              !hasUnclassifiedTransaction, enabled != isPersistentlyActive else { return }
         appIsBusy = true
+        pendingActiveState = enabled
         if enabled {
             applyRule()
         } else {
@@ -684,11 +687,13 @@ private struct PatchModuleToggle: View {
 
     private func cancelPendingAction() {
         showChangedRestoreConfirmation = false
+        pendingActiveState = nil
         appIsBusy = false
     }
 
     private func releaseBusyIfIdle() {
         guard !isWorking, !showChangedRestoreConfirmation else { return }
+        pendingActiveState = nil
         appIsBusy = false
     }
 
