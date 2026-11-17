@@ -13,12 +13,7 @@ r.sort(key=lambda r: tuple(int(x) for x in r["version"].split(".")))
 print(r[-1]["identifier"])
 ')
 DEVICE=$(xcrun simctl create "Installed Fax Aura UI" "com.apple.CoreSimulator.SimDeviceType.iPhone-11" "$RUNTIME")
-VIDEO_PID=''
 cleanup() {
-  if [[ -n "$VIDEO_PID" ]]; then
-    kill -INT "$VIDEO_PID" >/dev/null 2>&1 || true
-    wait "$VIDEO_PID" >/dev/null 2>&1 || true
-  fi
   xcrun simctl shutdown "$DEVICE" >/dev/null 2>&1 || true
   xcrun simctl delete "$DEVICE" >/dev/null 2>&1 || true
 }
@@ -50,13 +45,35 @@ xcrun simctl io "$DEVICE" screenshot "$OUTPUT/installed-four-modules.png"
 sleep 0.4
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/activity-orbit-next-frame.png"
 echo 'Recording the real silver orbit for motion-quality review'
-xcrun simctl io "$DEVICE" recordVideo --codec=h264 "$OUTPUT/activity-silver-orbit.mp4" > "$OUTPUT/recording.log" 2>&1 &
-VIDEO_PID=$!
-sleep 6
-kill -INT "$VIDEO_PID"
-wait "$VIDEO_PID" || true
-VIDEO_PID=''
-[[ -s "$OUTPUT/activity-silver-orbit.mp4" ]]
+python3 - "$DEVICE" "$OUTPUT" <<'PY'
+import os,signal,subprocess,sys,time
+from pathlib import Path
+device,output=sys.argv[1:]
+output=Path(output)
+video=output/'activity-silver-orbit.mp4'
+with (output/'recording.log').open('w') as log:
+    # A foreground Python child does not inherit Bash's ignored SIGINT from
+    # an asynchronous command. Signal the whole group in case xcrun forks.
+    process=subprocess.Popen(
+        ['xcrun','simctl','io',device,'recordVideo','--codec=h264',str(video)],
+        stdout=log,stderr=subprocess.STDOUT,start_new_session=True
+    )
+    try:
+        time.sleep(6)
+        if process.poll() is None:
+            os.killpg(process.pid,signal.SIGINT)
+        process.wait(timeout=20)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid,signal.SIGTERM)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid,signal.SIGKILL)
+            process.wait(timeout=5)
+        video.unlink(missing_ok=True)
+        log.write('\nVideo finalization timed out; screenshots remain valid.\n')
+        print('NOTE: optional video timed out; continuing screenshot checks')
+PY
 xcrun simctl terminate "$DEVICE" "$BUNDLE"
 echo 'Capturing single-row design matching the reported layout'
 xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design --simulate-installed-single
