@@ -63,40 +63,60 @@ struct PatchProjectsView: View {
 
     private var consoleBrandHeader: some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("AURA CONSOLE")
-                    .font(.system(size: 17, weight: .black, design: .monospaced))
-                    .tracking(1.5)
+                    .font(.system(size: 13, weight: .black, design: .monospaced))
+                    .tracking(1.4)
                     .foregroundStyle(.white)
-                Text(language.text("installed.online"))
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                Text("PATCH CONTROL / \(language.text("installed.online"))")
+                    .font(.system(size: 7, weight: .bold, design: .monospaced))
                     .tracking(0.6)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             Text("V\(AppInfo.appVersion)")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
-                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.white.opacity(0.38)))
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.75))
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.white.opacity(0.52), lineWidth: 0.8))
         }
         .padding(.horizontal, 3)
+        .padding(.bottom, 2)
+        .overlay(alignment: .bottom) {
+            HStack(spacing: 5) {
+                Rectangle().fill(Color.white.opacity(0.92)).frame(width: 26, height: 1)
+                Rectangle().fill(Color.white.opacity(0.14)).frame(height: 1)
+            }
+            .padding(.horizontal, 3)
+            .offset(y: 3)
+        }
     }
 
     private var faxAuraBanner: some View {
-        Image("ActivityHeaderArt")
-            .resizable()
-            .scaledToFill()
-            .frame(maxWidth: .infinity)
-            .frame(height: 100)
-            .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(.white.opacity(0.76), lineWidth: 1)
-            }
-            .accessibilityLabel("Fax Aura")
+        ZStack {
+            Color.black
+            Image("ActivityHeaderArt")
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+            LinearGradient(
+                colors: [.clear, Color.white.opacity(0.04), Color.black.opacity(0.42)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 118)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(.white.opacity(0.76), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.65), radius: 8, y: 3)
+        .accessibilityLabel("Fax Aura")
     }
 
     private var activityCard: some View {
@@ -125,7 +145,7 @@ struct PatchProjectsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 LinearGradient(
-                    colors: [Color.white.opacity(0.09), Color.white.opacity(0.025), Color.black.opacity(0.18)],
+                    colors: [Color(white: 0.10), Color(white: 0.065), Color(white: 0.045)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),
@@ -133,7 +153,7 @@ struct PatchProjectsView: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .strokeBorder(Color.gray.opacity(0.22), lineWidth: 0.8)
+                    .strokeBorder(Color.white.opacity(0.42), lineWidth: 0.8)
             }
             .overlay {
                 activityOrbitMotion
@@ -220,7 +240,7 @@ struct PatchProjectsView: View {
                 .foregroundStyle(.white)
                 .accessibilityHidden(true)
         }
-        .frame(width: 30, height: 30)
+        .frame(width: 34, height: 34)
     }
 
     private var moduleStatusPanel: some View {
@@ -243,15 +263,24 @@ struct PatchProjectsView: View {
                 label: language.text("installed.mode")
             )
         }
-        .padding(.vertical, 11)
-        .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 13))
-        .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.white.opacity(0.26), lineWidth: 0.8))
+        .padding(.horizontal, 8)
+        .frame(height: 42)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.095), Color.white.opacity(0.025)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white.opacity(0.30), lineWidth: 0.8))
+        .shadow(color: .white.opacity(0.05), radius: 8, y: 2)
     }
 
     private var statusDivider: some View {
         Rectangle()
             .fill(.white.opacity(0.20))
-            .frame(width: 1, height: 30)
+            .frame(width: 1, height: 24)
     }
 
     private func statusMetric(symbol: String, value: String, label: String) -> some View {
@@ -307,20 +336,38 @@ struct PatchProjectsView: View {
     }
 
     private func quickActionLabel(_ key: String, symbol: String) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .bold))
             Text(language.text(key))
-                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .font(.system(size: 7, weight: .black, design: .monospaced))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
-        .frame(height: 58)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.30), lineWidth: 0.8))
-        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .frame(height: 43)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.14), Color.white.opacity(0.035)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+        )
+        .overlay {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(.white.opacity(0.30), lineWidth: 0.8)
+                Rectangle()
+                    .fill(Color.white.opacity(0.72))
+                    .frame(width: 18, height: 1)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.leading, 10)
+                    .padding(.top, 1)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 
     private var functionsHeading: some View {
@@ -330,19 +377,19 @@ struct PatchProjectsView: View {
                 .frame(width: 3, height: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(language.text("installed.functions"))
-                    .font(.system(size: 18, weight: .black, design: .monospaced))
+                    .font(.system(size: 20, weight: .black, design: .monospaced))
                     .foregroundStyle(.white)
                 Text(language.text("installed.available"))
-                    .font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
                     .tracking(0.4)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
             Text(language.text("installed.active_total", Int64(activeRuleCount), Int64(totalRuleCount)))
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .frame(height: 28)
+                .padding(.horizontal, 10)
+                .frame(height: 36)
                 .background(Color.white.opacity(0.08), in: Capsule())
                 .overlay(Capsule().strokeBorder(.white.opacity(0.45), lineWidth: 0.8))
                 .lineLimit(1)
@@ -631,23 +678,30 @@ struct PatchProjectsView: View {
         HStack(spacing: 9) {
             Capsule()
                 .fill(.white)
-                .frame(width: 3, height: 48)
-            HStack(spacing: 8) {
+                .frame(width: 4, height: 50)
+            HStack(spacing: 9) {
                 Image("ActivityHeaderArt")
                     .resizable()
-                    .scaledToFit()
-                    .frame(width: 54, height: 31)
-                    .padding(2)
-                    .background(Color.black, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .scaledToFill()
+                    .frame(width: 48, height: 48, alignment: .leading)
+                    .clipped()
+                    .background(Color.black, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(.white.opacity(0.42), lineWidth: 0.7)
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "shippingbox.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.95), radius: 2)
+                            .padding(4)
                     }
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(project.name)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
@@ -664,21 +718,33 @@ struct PatchProjectsView: View {
                 onUpdate: store.reload
             )
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 9)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, minHeight: 68)
         .background(
             LinearGradient(
-                colors: [Color.white.opacity(0.075), Color.white.opacity(0.025), Color.black.opacity(0.3)],
+                colors: [Color.white.opacity(0.105), Color(white: 0.028)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(.white.opacity(0.34), lineWidth: 0.8)
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(.white.opacity(0.28), lineWidth: 0.8)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.30), .clear, .white.opacity(0.14)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
         }
+        .shadow(color: .black.opacity(0.72), radius: 6, y: 2)
     }
 
     private func projectCard(_ item: PatchLibraryItem) -> some View {
@@ -834,61 +900,43 @@ private struct PatchModuleToggle: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 3) {
             Text(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
-                .font(.system(size: 7, weight: .bold, design: .monospaced))
+                .font(.system(size: 8, weight: .black, design: .monospaced))
                 .foregroundStyle(isActive ? Color.green.opacity(0.95) : Color.secondary)
                 .lineLimit(1)
 
-            Text(language.text("patch.module_start"))
-                .font(.system(size: 6.5, weight: .black, design: .monospaced))
+            Text(language.text(isActive ? "patch.module_stop" : "patch.module_start"))
+                .font(.system(size: 7, weight: .black, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.88))
                 .lineLimit(1)
 
             Button {
                 requestToggle(enabled: !isActive)
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Text(isActive ? "ON" : "OFF")
                         .font(.system(size: 8, weight: .black, design: .monospaced))
-                    Spacer(minLength: 0)
                     Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.white, Color(white: 0.82)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 17, height: 17)
+                        .fill(isActive ? Color.black : Color.white)
+                        .frame(width: 15, height: 15)
                         .overlay {
-                            Circle().strokeBorder(.white.opacity(0.82), lineWidth: 0.6)
+                            Circle().strokeBorder(.white.opacity(isActive ? 0.14 : 0.82), lineWidth: 0.6)
                         }
                         .shadow(color: .black.opacity(0.38), radius: 1.5, y: 1)
                 }
-                .foregroundStyle(.white)
-                .padding(.leading, 8)
-                .padding(.trailing, 4)
-                .frame(width: 70, height: 26)
-                .background(
-                    LinearGradient(
-                        colors: isActive
-                            ? [Color.green.opacity(0.42), Color.green.opacity(0.20)]
-                            : [Color.white.opacity(0.18), Color.white.opacity(0.08)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: Capsule()
-                )
+                .foregroundStyle(isActive ? Color.black : Color.white)
+                .padding(.horizontal, 7)
+                .frame(width: 58, height: 28)
+                .background(isActive ? Color.white : Color.white.opacity(0.10), in: Capsule())
                 .overlay {
                     Capsule()
                         .strokeBorder(
-                            isActive ? Color.green.opacity(0.88) : Color.gray.opacity(0.72),
-                            lineWidth: 0.9
+                            isActive ? Color.white.opacity(0.90) : Color.white.opacity(0.38),
+                            lineWidth: 1
                         )
                 }
                 .shadow(
-                    color: isActive ? Color.green.opacity(0.25) : Color.black.opacity(0.22),
-                    radius: 3,
-                    y: 1
+                    color: isActive ? Color.white.opacity(0.18) : .clear,
+                    radius: 7
                 )
                 .animation(.easeInOut(duration: 0.16), value: isActive)
             }
@@ -899,7 +947,7 @@ private struct PatchModuleToggle: View {
             .accessibilityLabel("\(project.name), \(isActive ? "ON" : "OFF")")
             .accessibilityValue(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
         }
-        .frame(width: 78)
+        .frame(width: 64)
         .confirmationDialog(
             language.text("patch.restore_changed_title"),
             isPresented: $showChangedRestoreConfirmation,
