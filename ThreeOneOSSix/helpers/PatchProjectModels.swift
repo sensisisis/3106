@@ -184,6 +184,7 @@ enum PatchPackageError: Error, Equatable {
     case projectAlreadyApplied
     case restoreTargetsChanged([String])
     case activePatchCannotBeDeleted
+    case activePatchCannotBeEdited
     case privatePatchRequiresPassword
     case privateOperationFailed
     case applyFailed
@@ -210,6 +211,7 @@ extension PatchPackageError: LocalizedError {
         case .projectAlreadyApplied: return "patch.error.already_applied"
         case .restoreTargetsChanged: return "patch.error.restore_targets_changed"
         case .activePatchCannotBeDeleted: return "patch.error.active_delete"
+        case .activePatchCannotBeEdited: return "patch.error.active_edit"
         case .symbolicLinkUnsupported: return "patch.error.symlink"
         case .privatePatchRequiresPassword: return "patch.error.private_password"
         case .privateOperationFailed: return "patch.error.private_operation"

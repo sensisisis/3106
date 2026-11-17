@@ -1,7 +1,10 @@
 import Foundation
 
 enum DevicePatchService {
-    static func apply(project: PatchProject) throws -> PatchTransactionReceipt {
+    static func apply(
+        project: PatchProject,
+        sourceProjectID: UUID? = nil
+    ) throws -> PatchTransactionReceipt {
         let bundleIDs = orderedBundleIdentifiers(in: project)
         return try withResolvedContainers(bundleIDs: bundleIDs) { roots in
             try PatchTransaction.apply(
@@ -13,9 +16,47 @@ enum DevicePatchService {
                     }
                     return root
                 },
-                backupCenter: .shared
+                backupCenter: .shared,
+                sourceProjectID: sourceProjectID
             )
         }
+    }
+
+    static func apply(rule: PatchRule, in project: PatchProject) throws -> PatchTransactionReceipt {
+        let ruleProject = PatchProject(
+            id: PatchTransaction.ruleTransactionProjectID(
+                projectID: project.id,
+                ruleID: rule.id
+            ),
+            name: project.name,
+            author: project.author,
+            isPrivate: project.isPrivate,
+            createdAt: project.createdAt,
+            updatedAt: project.updatedAt,
+            bundleIdentifiers: [rule.bundleID],
+            rules: [rule]
+        )
+        return try apply(project: ruleProject, sourceProjectID: project.id)
+    }
+
+    static func latestReceipt(projectID: UUID, ruleID: UUID) -> PatchTransactionReceipt? {
+        latestReceipt(projectID: PatchTransaction.ruleTransactionProjectID(
+            projectID: projectID,
+            ruleID: ruleID
+        ))
+    }
+
+    static func isRuleApplied(projectID: UUID, ruleID: UUID) -> Bool {
+        latestReceipt(projectID: projectID, ruleID: ruleID) != nil
+    }
+
+    static func hasActiveTransactions(projectID: UUID) -> Bool {
+        if latestReceipt(projectID: projectID) != nil { return true }
+        guard let backupRoot = try? PatchProjectLibrary.backupRootURL() else { return true }
+        return PatchTransaction.hasActiveTransactions(
+            sourceProjectID: projectID,
+            backupRoot: backupRoot
+        )
     }
 
     static func inspectRestore(receipt: PatchTransactionReceipt) throws -> PatchRestoreInspection {

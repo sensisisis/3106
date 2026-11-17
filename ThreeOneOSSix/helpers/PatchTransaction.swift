@@ -57,6 +57,7 @@ enum PatchTransaction {
         let schemaVersion: Int
         let transactionID: UUID
         let projectID: UUID
+        let sourceProjectID: UUID?
         let createdAt: Date
         var status: Status
         let records: [Record]
@@ -93,7 +94,7 @@ enum PatchTransaction {
     }
 
     private static let minimumSchemaVersion = 1
-    private static let schemaVersion = 2
+    private static let schemaVersion = 3
     private static let journalFilename = "journal.plist"
 
     static func apply(
@@ -102,7 +103,8 @@ enum PatchTransaction {
         containerResolver: (String) throws -> URL,
         beforeWrite: ((Int) throws -> Void)? = nil,
         fileManager: FileManager = .default,
-        backupCenter: BackupCenter? = nil
+        backupCenter: BackupCenter? = nil,
+        sourceProjectID: UUID? = nil
     ) throws -> PatchTransactionReceipt {
         guard !project.rules.isEmpty || !project.directories.isEmpty else {
             throw PatchPackageError.invalidProject
@@ -267,6 +269,7 @@ enum PatchTransaction {
             schemaVersion: schemaVersion,
             transactionID: transactionID,
             projectID: project.id,
+            sourceProjectID: sourceProjectID,
             createdAt: Date(),
             status: .prepared,
             records: records,
@@ -545,6 +548,61 @@ enum PatchTransaction {
                 journalURL: $0.1
             )
         }
+    }
+
+    static func ruleTransactionProjectID(projectID: UUID, ruleID: UUID) -> UUID {
+        var bytes = Array(SHA256.hash(
+            data: Data("3106-rule-transaction:\(projectID.uuidString):\(ruleID.uuidString)".utf8)
+        ).prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+    }
+
+    static func hasActiveTransactions(
+        sourceProjectID: UUID,
+        backupRoot: URL,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        let projectDirectories: [URL]
+        do {
+            projectDirectories = try fileManager.contentsOfDirectory(
+                at: backupRoot,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            return fileManager.fileExists(atPath: backupRoot.path)
+        }
+
+        for projectDirectory in projectDirectories {
+            let values = try? projectDirectory.resourceValues(forKeys: [.isDirectoryKey])
+            guard values?.isDirectory == true else { continue }
+            let transactions: [URL]
+            do {
+                transactions = try fileManager.contentsOfDirectory(
+                    at: projectDirectory,
+                    includingPropertiesForKeys: [.isDirectoryKey],
+                    options: [.skipsHiddenFiles]
+                )
+            } catch {
+                return true
+            }
+            for transactionDirectory in transactions {
+                let journalURL = transactionDirectory.appendingPathComponent(journalFilename)
+                guard fileManager.fileExists(atPath: journalURL.path) else { continue }
+                guard let journal = try? readJournal(journalURL) else { return true }
+                guard journal.sourceProjectID == sourceProjectID,
+                      journal.status == .applied || journal.status == .prepared else { continue }
+                return true
+            }
+        }
+        return false
     }
 
     static func appliedTargetKeys(

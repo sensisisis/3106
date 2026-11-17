@@ -34,14 +34,16 @@ struct ContentView: View {
         } else if arguments.contains("--simulate-wallpaper-tab") {
             initialTab = 7
         } else {
-            initialTab = 0
+            initialTab = AppSection.installed.rawValue
         }
         _tabNavigation = State(initialValue: AppTabNavigationState(selectedTab: initialTab))
         _showSettings = State(
             initialValue: arguments.contains("--simulate-settings")
         )
 #else
-        _tabNavigation = State(initialValue: AppTabNavigationState())
+        _tabNavigation = State(
+            initialValue: AppTabNavigationState(selectedTab: AppSection.installed.rawValue)
+        )
 #endif
     }
 
@@ -110,52 +112,11 @@ struct ContentView: View {
     }
 
     private var compactLayout: some View {
-        TabView(selection: tabSelection) {
-            ForEach(featureVisibility.visibleSections) { section in
-                sectionContent(section)
-                    .tabItem {
-                        CompactTabLabel(
-                            title: language.text(section.titleKey),
-                            systemImage: section.systemImage
-                        )
-                    }
-                    .tag(section.rawValue)
-            }
-        }
+        sectionContent(selectedVisibleSection)
     }
 
     private var regularLayout: some View {
-        NavigationSplitView {
-            List {
-                ForEach(featureVisibility.visibleSections) { section in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            tabNavigation.select(section.rawValue)
-                        }
-                    } label: {
-                        Label(language.text(section.titleKey), systemImage: section.systemImage)
-                            .fontWeight(section.rawValue == tabNavigation.selectedTab ? .semibold : .regular)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(
-                        section.rawValue == tabNavigation.selectedTab
-                            ? AppTheme.accent.opacity(0.14)
-                            : Color.clear
-                    )
-                    .accessibilityAddTraits(
-                        section.rawValue == tabNavigation.selectedTab ? .isSelected : []
-                    )
-                }
-            }
-            .navigationTitle("3106")
-            .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
-        } detail: {
-            sectionContent(selectedVisibleSection)
-                .id(selectedVisibleSection.rawValue)
-        }
-        .navigationSplitViewStyle(.balanced)
+        sectionContent(selectedVisibleSection)
     }
 
     @ViewBuilder
@@ -174,7 +135,7 @@ struct ContentView: View {
                 onOpenLogs: openLogs
             )
         case .installed:
-            PatchProjectsView()
+            PatchProjectsView(onOpenSettings: openSettings)
         case .files:
             AppDataBrowserView(
                 tabSession: filesTabSession,
@@ -198,13 +159,6 @@ struct ContentView: View {
         }
     }
 
-    private var tabSelection: Binding<Int> {
-        Binding(
-            get: { tabNavigation.selectedTab },
-            set: { tabNavigation.select($0) }
-        )
-    }
-
     private var filesTabSession: Binding<FilesTabSession> {
         Binding(
             get: { tabNavigation.filesTabs },
@@ -214,7 +168,7 @@ struct ContentView: View {
 
     private var featureVisibility: FeatureVisibility {
         FeatureVisibility(
-            selectedSections: [.home, .installed],
+            selectedSections: [.installed],
             wallpapersSupported: WallpaperFeatureSupportPolicy.isSupported(
                 major: AppInfo.versionTuple.major
             ),
@@ -226,7 +180,7 @@ struct ContentView: View {
         let selected = AppSection(rawValue: tabNavigation.selectedTab)
         return selected.flatMap {
             featureVisibility.isVisible($0) ? $0 : nil
-        } ?? .home
+        } ?? .installed
     }
 
     private func openSettings() {
@@ -235,24 +189,5 @@ struct ContentView: View {
 
     private func openLogs() {
         showLogs = true
-    }
-}
-
-private struct CompactTabLabel: View {
-    let title: String
-    let systemImage: String
-
-    @ViewBuilder
-    var body: some View {
-        if let image = UIImage(
-            systemName: systemImage,
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
-        )?.withRenderingMode(.alwaysTemplate) {
-            Image(uiImage: image)
-        } else {
-            Image(systemName: systemImage)
-                .font(.system(size: 17, weight: .medium))
-        }
-        Text(title)
     }
 }

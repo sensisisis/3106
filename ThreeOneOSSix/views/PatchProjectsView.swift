@@ -140,6 +140,12 @@ struct PatchProjectsView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: onOpenSettings) {
+                        Image(systemName: "gearshape.fill")
+                    }
+                    .accessibilityLabel(language.text("settings.title"))
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button {
@@ -633,10 +639,12 @@ private struct PatchProjectDetailView: View {
     let projectID: UUID
     @State private var showEditor = false
     @State private var editingRule: PatchRule?
-    @State private var showApplyConfirmation = false
     @State private var showRestoreConfirmation = false
     @State private var showChangedRestoreConfirmation = false
     @State private var showResetConfirmation = false
+    @State private var showRuleStartConfirmation = false
+    @State private var showRuleStopConfirmation = false
+    @State private var pendingRule: PatchRule?
     @State private var restoreChangedPaths: [String] = []
     @State private var isWorking = false
     @State private var actionAlert: PatchStoreAlert?
@@ -648,6 +656,30 @@ private struct PatchProjectDetailView: View {
 
     private var receipt: PatchTransactionReceipt? {
         DevicePatchService.latestReceipt(projectID: projectID)
+    }
+
+    private var activeRuleCount: Int {
+        guard let project = item?.project else { return 0 }
+        if receipt != nil { return project.rules.count }
+        return project.rules.filter {
+            DevicePatchService.isRuleApplied(projectID: projectID, ruleID: $0.id)
+        }.count
+    }
+
+    private var hasActiveModules: Bool {
+        receipt != nil || activeRuleCount > 0 || hasUnclassifiedActiveTransaction
+    }
+
+    private var hasUnclassifiedActiveTransaction: Bool {
+        receipt == nil && activeRuleCount == 0
+            && DevicePatchService.hasActiveTransactions(projectID: projectID)
+    }
+
+    private func isRuleActive(_ rule: PatchRule) -> Bool {
+        receipt != nil || DevicePatchService.isRuleApplied(
+            projectID: projectID,
+            ruleID: rule.id
+        )
     }
 
     private var isWorkspaceProject: Bool {
@@ -729,34 +761,32 @@ private struct PatchProjectDetailView: View {
                                     systemImage: "folder"
                                 )
                             }
+                            .disabled(hasActiveModules)
                         }
                     } header: {
                         Text(language.text("patch.workspace"))
                     } footer: {
                         Text(language.text("patch.workspace_detail_footer"))
                     }
-                } else {
+                }
+
+                if item.canInspectContents && !project.rules.isEmpty {
                     Section {
                         ForEach(project.rules) { rule in
-                            Button {
-                                editingRule = rule
-                            } label: {
-                                HStack(spacing: 10) {
-                                    ruleSummary(rule)
-                                    Spacer(minLength: 8)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint(language.text("patch.edit_rule_hint"))
+                            moduleRow(rule)
                         }
                     } header: {
-                        Text(language.text("patch.rules"))
-                    } footer: {
-                        Text(language.text("patch.legacy_footer"))
+                        HStack {
+                            Text(language.text("patch.rules"))
+                            Spacer()
+                            Text(language.text(
+                                "patch.modules_active",
+                                Int64(activeRuleCount),
+                                Int64(project.rules.count)
+                            ))
+                            .font(.caption2.weight(.bold).monospaced())
+                            .foregroundStyle(AppTheme.accent)
+                        }
                     }
                 }
 
@@ -772,15 +802,12 @@ private struct PatchProjectDetailView: View {
                     }
                 }
 
-                Section {
-                    Button {
-                        showApplyConfirmation = true
-                    } label: {
-                        actionLabel("patch.apply", systemImage: "checkmark.shield.fill")
-                    }
-                    .disabled(isWorking || receipt != nil)
+                if receipt != nil {
+                    Section {
+                        Text(language.text("patch.module_legacy_notice"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
 
-                    if receipt != nil {
                         Button {
                             showResetConfirmation = true
                         } label: {
@@ -791,17 +818,19 @@ private struct PatchProjectDetailView: View {
                         Button(role: .destructive) {
                             showRestoreConfirmation = true
                         } label: {
-                            actionLabel("patch.restore", systemImage: "arrow.uturn.backward.circle")
+                            actionLabel("patch.module_legacy_restore", systemImage: "arrow.uturn.backward.circle")
                         }
                         .disabled(isWorking)
+                    } header: {
+                        Text(language.text("patch.restore"))
                     }
+                }
 
+                Section {
                     Button(action: prepareExport) {
                         actionLabel("patch.export", systemImage: "square.and.arrow.up")
                     }
-                    .disabled(isWorking)
-                } footer: {
-                    Text(language.text("patch.apply_footer"))
+                    .disabled(isWorking || hasActiveModules)
                 }
             }
         }
@@ -814,7 +843,7 @@ private struct PatchProjectDetailView: View {
                     ProgressView()
                 } else if !isWorkspaceProject, item?.canInspectContents == true {
                     Button(language.text("patch.edit")) { showEditor = true }
-                        .disabled(item?.project == nil)
+                        .disabled(item?.project == nil || hasActiveModules)
                 }
             }
         }
@@ -834,14 +863,26 @@ private struct PatchProjectDetailView: View {
             }
         }
         .confirmationDialog(
-            language.text("patch.apply_confirm_title"),
-            isPresented: $showApplyConfirmation,
+            language.text("patch.module_start_title"),
+            isPresented: $showRuleStartConfirmation,
             titleVisibility: .visible
         ) {
-            Button(language.text("patch.apply")) { apply() }
+            Button(language.text("patch.module_start")) { applyPendingRule() }
             Button(language.text("common.cancel"), role: .cancel) {}
         } message: {
-            Text(language.text("patch.apply_confirm_message"))
+            Text(language.text("patch.module_start_message"))
+        }
+        .confirmationDialog(
+            language.text("patch.module_stop_title"),
+            isPresented: $showRuleStopConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(language.text("patch.module_stop"), role: .destructive) {
+                prepareRuleRestore()
+            }
+            Button(language.text("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(language.text("patch.module_stop_message"))
         }
         .confirmationDialog(
             language.text("patch.restore_confirm_title"),
@@ -859,7 +900,11 @@ private struct PatchProjectDetailView: View {
             titleVisibility: .visible
         ) {
             Button(language.text("patch.restore_changed_action"), role: .destructive) {
-                restore(allowChangedTargets: true)
+                if let pendingRule {
+                    restoreRule(pendingRule, allowChangedTargets: true)
+                } else {
+                    restore(allowChangedTargets: true)
+                }
             }
             Button(language.text("common.cancel"), role: .cancel) {}
         } message: {
@@ -935,6 +980,56 @@ private struct PatchProjectDetailView: View {
         .padding(.vertical, 3)
     }
 
+    private func moduleRow(_ rule: PatchRule) -> some View {
+        HStack(spacing: 12) {
+            if !isWorkspaceProject {
+                Button {
+                    guard !hasActiveModules else { return }
+                    editingRule = rule
+                } label: {
+                    ruleSummary(rule)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(hasActiveModules)
+                .accessibilityHint(language.text("patch.edit_rule_hint"))
+            } else {
+                ruleSummary(rule)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            VStack(alignment: .trailing, spacing: 5) {
+                Text(language.text("patch.module_start"))
+                    .font(.caption2.weight(.bold).monospaced())
+                    .foregroundStyle(AppTheme.accent)
+                Text(language.text(isRuleActive(rule)
+                    ? "patch.module_running"
+                    : "patch.module_ready"))
+                    .font(.caption2.weight(.bold).monospaced())
+                    .foregroundStyle(isRuleActive(rule) ? Color.green : Color.secondary)
+                Toggle(isOn: Binding(
+                    get: { isRuleActive(rule) },
+                    set: { requestRuleToggle(rule, enabled: $0) }
+                )) {
+                    EmptyView()
+                }
+                .labelsHidden()
+                .tint(.green)
+                .disabled(
+                    isWorking || store.isBusy || receipt != nil
+                        || hasUnclassifiedActiveTransaction
+                )
+                .accessibilityLabel(rule.relativePath)
+                .accessibilityValue(language.text(isRuleActive(rule)
+                    ? "patch.module_running"
+                    : "patch.module_ready"))
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.vertical, 5)
+    }
+
     private func updateRule(_ updatedRule: PatchRule) {
         guard var project = item?.project,
               let index = project.rules.firstIndex(where: { $0.id == updatedRule.id }) else {
@@ -959,19 +1054,94 @@ private struct PatchProjectDetailView: View {
         }
     }
 
-    private func apply() {
-        guard let item, let baseProject = item.project else { return }
+    private func requestRuleToggle(_ rule: PatchRule, enabled: Bool) {
+        guard !isWorking, !store.isBusy, receipt == nil,
+              enabled != isRuleActive(rule) else { return }
+        pendingRule = rule
+        if enabled {
+            showRuleStartConfirmation = true
+        } else {
+            showRuleStopConfirmation = true
+        }
+    }
+
+    private func applyPendingRule() {
+        guard let rule = pendingRule, let item, let baseProject = item.project else { return }
+        let shouldSynchronizeWorkspace = item.summary.schemaVersion >= 2
+            && item.canInspectContents
+            && !hasActiveModules
         isWorking = true
         Task.detached(priority: .userInitiated) {
             do {
-                let project = item.summary.schemaVersion >= 2 && item.canInspectContents
-                    ? try PatchProjectLibrary.synchronizeWorkspace(item: item)
-                    : baseProject
-                _ = try DevicePatchService.apply(project: project)
+                let project: PatchProject
+                if shouldSynchronizeWorkspace {
+                    project = try PatchProjectLibrary.synchronizeWorkspace(item: item)
+                } else {
+                    project = baseProject
+                }
+                guard let currentRule = project.rules.first(where: { $0.id == rule.id }) else {
+                    throw PatchPackageError.invalidProject
+                }
+                _ = try DevicePatchService.apply(rule: currentRule, in: project)
                 await MainActor.run {
                     store.reload()
                     isWorking = false
-                    actionAlert = PatchStoreAlert(titleKey: "common.done", messageKey: "patch.applied_message")
+                    pendingRule = nil
+                    actionAlert = PatchStoreAlert(
+                        titleKey: "common.done",
+                        messageKey: "patch.applied_message"
+                    )
+                }
+            } catch let error as PatchPackageError {
+                await MainActor.run {
+                    isWorking = false
+                    pendingRule = nil
+                    actionAlert = PatchStoreAlert(
+                        titleKey: "common.failed",
+                        messageKey: privateErrorKey(for: error),
+                        messageArgument: privateErrorArgument(for: error)
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    pendingRule = nil
+                    actionAlert = PatchStoreAlert(
+                        titleKey: "common.failed",
+                        messageKey: "patch.error.apply"
+                    )
+                }
+            }
+        }
+    }
+
+    private func prepareRuleRestore() {
+        guard let rule = pendingRule,
+              let receipt = DevicePatchService.latestReceipt(
+                projectID: projectID,
+                ruleID: rule.id
+              ) else { return }
+        isWorking = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                let inspection = try DevicePatchService.inspectRestore(receipt: receipt)
+                if !inspection.changedTargets.isEmpty {
+                    await MainActor.run {
+                        isWorking = false
+                        restoreChangedPaths = inspection.changedTargets.map(\.displayPath)
+                        showChangedRestoreConfirmation = true
+                    }
+                    return
+                }
+                try DevicePatchService.restore(receipt: receipt)
+                await MainActor.run {
+                    store.reload()
+                    isWorking = false
+                    pendingRule = nil
+                    actionAlert = PatchStoreAlert(
+                        titleKey: "common.done",
+                        messageKey: "patch.restored_message"
+                    )
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
@@ -985,7 +1155,55 @@ private struct PatchProjectDetailView: View {
             } catch {
                 await MainActor.run {
                     isWorking = false
-                    actionAlert = PatchStoreAlert(titleKey: "common.failed", messageKey: "patch.error.apply")
+                    actionAlert = PatchStoreAlert(
+                        titleKey: "common.failed",
+                        messageKey: "patch.error.restore"
+                    )
+                }
+            }
+        }
+    }
+
+    private func restoreRule(
+        _ rule: PatchRule,
+        allowChangedTargets: Bool
+    ) {
+        guard let receipt = DevicePatchService.latestReceipt(
+            projectID: projectID,
+            ruleID: rule.id
+        ) else { return }
+        isWorking = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                try DevicePatchService.restore(
+                    receipt: receipt,
+                    allowChangedTargets: allowChangedTargets
+                )
+                await MainActor.run {
+                    store.reload()
+                    isWorking = false
+                    pendingRule = nil
+                    actionAlert = PatchStoreAlert(
+                        titleKey: "common.done",
+                        messageKey: "patch.restored_message"
+                    )
+                }
+            } catch let error as PatchPackageError {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = PatchStoreAlert(
+                        titleKey: "common.failed",
+                        messageKey: privateErrorKey(for: error),
+                        messageArgument: privateErrorArgument(for: error)
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = PatchStoreAlert(
+                        titleKey: "common.failed",
+                        messageKey: "patch.error.restore"
+                    )
                 }
             }
         }

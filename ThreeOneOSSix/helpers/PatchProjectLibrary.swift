@@ -57,6 +57,24 @@ enum PatchProjectLibrary {
         return root
     }
 
+    static func hasActivePatchTransactions(
+        projectID: UUID,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard let backupRoot = try? backupRootURL(fileManager: fileManager) else {
+            return true
+        }
+        return PatchTransaction.latestReceipt(
+            projectID: projectID,
+            backupRoot: backupRoot,
+            fileManager: fileManager
+        ) != nil || PatchTransaction.hasActiveTransactions(
+            sourceProjectID: projectID,
+            backupRoot: backupRoot,
+            fileManager: fileManager
+        )
+    }
+
     static func load(fileManager: FileManager = .default) -> [PatchLibraryItem] {
         guard let root = try? packageRootURL(fileManager: fileManager),
               let urls = try? fileManager.contentsOfDirectory(
@@ -136,6 +154,21 @@ enum PatchProjectLibrary {
         existingURL: URL? = nil,
         fileManager: FileManager = .default
     ) throws -> URL {
+        if let existingURL {
+            let newSummary = try PatchPackageCodec.inspect(data)
+            let existingData = try readPackage(at: existingURL)
+            let existingSummary = try PatchPackageCodec.inspect(existingData)
+            let hasActiveTransaction = hasActivePatchTransactions(
+                projectID: existingSummary.packageID,
+                fileManager: fileManager
+            ) || hasActivePatchTransactions(
+                projectID: newSummary.packageID,
+                fileManager: fileManager
+            )
+            guard !hasActiveTransaction else {
+                throw PatchPackageError.activePatchCannotBeEdited
+            }
+        }
         let destination: URL
         if let existingURL {
             destination = existingURL
@@ -280,12 +313,10 @@ enum PatchProjectLibrary {
     }
 
     static func delete(_ item: PatchLibraryItem, fileManager: FileManager = .default) throws {
-        let backupRoot = try backupRootURL(fileManager: fileManager)
-        guard PatchTransaction.latestReceipt(
+        guard !hasActivePatchTransactions(
             projectID: item.id,
-            backupRoot: backupRoot,
             fileManager: fileManager
-        ) == nil else {
+        ) else {
             throw PatchPackageError.activePatchCannotBeDeleted
         }
         if fileManager.fileExists(atPath: item.packageURL.path) {
