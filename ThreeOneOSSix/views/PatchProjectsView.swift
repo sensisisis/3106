@@ -19,6 +19,7 @@ private enum WallpaperPackagePickerPolicy {
 
 struct PatchProjectsView: View {
     @Environment(\.appLanguage) private var language
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var draftCoordinator: PatchDraftCoordinator
     @EnvironmentObject private var store: PatchProjectStore
     @ObservedObject private var appLog = AppLog.shared
@@ -27,7 +28,7 @@ struct PatchProjectsView: View {
     @State private var showImporter = false
     @State private var showWallpaperImporter = false
     @State private var showCleaner = false
-    @State private var searchText = ""
+    @State private var activityPulse = false
     @State private var wallpaperPackages: [WallpaperStagedPackage] = []
     @State private var wallpaperImportFeedback: WallpaperImportFeedback?
     @State private var wallpaperPendingDeletion: WallpaperStagedPackage?
@@ -38,46 +39,8 @@ struct PatchProjectsView: View {
     let onOpenSettings: () -> Void
     let onOpenLogs: () -> Void
 
-    private var filteredItems: [PatchLibraryItem] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return store.items }
-        return store.items.filter { item in
-            if item.packageURL.lastPathComponent.localizedCaseInsensitiveContains(query) {
-                return true
-            }
-            guard let project = item.project else { return false }
-            if project.name.localizedCaseInsensitiveContains(query)
-                || project.author.localizedCaseInsensitiveContains(query) {
-                return true
-            }
-            guard item.canInspectContents else { return false }
-            return project.allBundleIdentifiers.contains {
-                    $0.localizedCaseInsensitiveContains(query)
-                }
-                || project.directories.contains {
-                    $0.relativePath.localizedCaseInsensitiveContains(query)
-                }
-                || project.rules.contains {
-                    $0.relativePath.localizedCaseInsensitiveContains(query)
-                        || $0.replacementFilename.localizedCaseInsensitiveContains(query)
-                }
-        }
-    }
-
-    private var filteredWallpaperPackages: [WallpaperStagedPackage] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return wallpaperPackages }
-        return wallpaperPackages.filter {
-            $0.displayName.localizedCaseInsensitiveContains(query)
-        }
-    }
-
     private var hasLocalContent: Bool {
         !store.items.isEmpty
-    }
-
-    private var hasSearchResults: Bool {
-        !filteredItems.isEmpty
     }
 
     private var totalRuleCount: Int {
@@ -140,11 +103,22 @@ struct PatchProjectsView: View {
     private var activityCard: some View {
         Button(action: onOpenLogs) {
             HStack(spacing: 12) {
-                Image(systemName: "waveform.path")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(Color.white.opacity(0.20), in: Circle())
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.11))
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+                        .scaleEffect(activityPulse ? 1.35 : 0.78)
+                        .opacity(activityPulse ? 0 : 0.72)
+                    Image(systemName: "waveform.path")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 42, height: 42)
+                .animation(
+                    reduceMotion ? nil : .easeOut(duration: 1.35).repeatForever(autoreverses: false),
+                    value: activityPulse
+                )
                 VStack(alignment: .leading, spacing: 3) {
                     Text(language.text("installed.activity"))
                         .font(.system(size: 15, weight: .bold))
@@ -166,10 +140,24 @@ struct PatchProjectsView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 15))
-            .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(.white.opacity(0.72), lineWidth: 1))
+            .background(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.09), Color.white.opacity(0.025), Color.black.opacity(0.18)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(.white.opacity(0.32), lineWidth: 0.8)
+            }
+            .shadow(color: .black.opacity(0.32), radius: 8, y: 3)
         }
         .buttonStyle(.plain)
+        .onAppear {
+            activityPulse = !reduceMotion
+        }
     }
 
     private var moduleStatusPanel: some View {
@@ -276,22 +264,22 @@ struct PatchProjectsView: View {
         HStack(alignment: .center, spacing: 9) {
             Capsule()
                 .fill(.white)
-                .frame(width: 4, height: 38)
+                .frame(width: 3, height: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(language.text("installed.functions"))
-                    .font(.system(size: 22, weight: .black, design: .monospaced))
+                    .font(.system(size: 18, weight: .black, design: .monospaced))
                     .foregroundStyle(.white)
                 Text(language.text("installed.available"))
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .tracking(0.5)
+                    .font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .tracking(0.4)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
             Text(language.text("installed.active_total", Int64(activeRuleCount), Int64(totalRuleCount)))
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .frame(height: 36)
+                .padding(.horizontal, 8)
+                .frame(height: 28)
                 .background(Color.white.opacity(0.08), in: Capsule())
                 .overlay(Capsule().strokeBorder(.white.opacity(0.45), lineWidth: 0.8))
                 .lineLimit(1)
@@ -322,21 +310,14 @@ struct PatchProjectsView: View {
                     activityCard
                     moduleStatusPanel
                     quickActions
-                    AppSearchField(
-                        text: $searchText,
-                        prompt: language.text("patch.search"),
-                        clearLabel: language.text("common.clear")
-                    )
                     functionsHeading
 
                     if !hasLocalContent && store.isBusy {
                         loadingState
                     } else if !hasLocalContent {
                         emptyState
-                    } else if !hasSearchResults && !store.isBusy {
-                        searchEmptyState
                     } else {
-                        ForEach(filteredItems) { item in
+                        ForEach(store.items) { item in
                             itemRow(item)
                         }
                     }
@@ -348,14 +329,6 @@ struct PatchProjectsView: View {
             .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationTitle(language.text("tab.installed"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: onOpenLogs) {
-                        Image(systemName: "waveform.path")
-                    }
-                    .accessibilityLabel(language.text("logs.title"))
-                }
-            }
             .sheet(isPresented: $showImporter) {
                 FileDocumentPicker(
                     allowedContentTypes: PatchPackagePickerPolicy.allowedContentTypes,
@@ -600,25 +573,38 @@ struct PatchProjectsView: View {
         HStack(spacing: 9) {
             Capsule()
                 .fill(.white)
-                .frame(width: 3, height: 62)
+                .frame(width: 3, height: 48)
             NavigationLink {
                 PatchProjectDetailView(store: store, projectID: item.id)
             } label: {
-                HStack(spacing: 10) {
-                    AppLogo(size: 48)
-                    VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Image("ActivityHeaderArt")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 54, height: 31)
+                        .padding(2)
+                        .background(Color.black, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(.white.opacity(0.42), lineWidth: 0.7)
+                        }
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(rule.replacementFilename.isEmpty ? project.name : rule.replacementFilename)
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.78)
                         Text(project.name)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         Text(rule.relativePath)
-                            .font(.system(size: 9, design: .monospaced))
+                            .font(.system(size: 8, design: .monospaced))
                             .foregroundStyle(.secondary.opacity(0.85))
                             .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -635,9 +621,9 @@ struct PatchProjectsView: View {
                 onUpdate: store.reload
             )
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, minHeight: 82)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, minHeight: 68)
         .background(
             LinearGradient(
                 colors: [Color.white.opacity(0.075), Color.white.opacity(0.025), Color.black.opacity(0.3)],
@@ -698,21 +684,6 @@ struct PatchProjectsView: View {
         .padding(.vertical, 64)
     }
 
-    private var searchEmptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: AppTheme.emptyIconSize, weight: .light))
-                .foregroundStyle(.secondary)
-            Text(language.text("patch.search_empty"))
-                .font(.headline)
-            Text(language.text("patch.search_empty_message"))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 64)
-    }
 }
 
 private struct WallpaperImportFeedback: Identifiable {
@@ -842,20 +813,14 @@ private struct PatchModuleToggle: View {
     }
 
     var body: some View {
-        VStack(spacing: 3) {
-            Text(rule.relativePath)
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity)
+        VStack(spacing: 2) {
             Text(language.text("patch.module_start"))
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
                 .foregroundStyle(AppTheme.accent)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .font(.system(size: 7, weight: .bold, design: .monospaced))
                 .foregroundStyle(isActive ? Color.green : Color.secondary)
                 .lineLimit(1)
             Toggle(isOn: Binding(
@@ -866,7 +831,7 @@ private struct PatchModuleToggle: View {
             }
             .labelsHidden()
             .tint(.green)
-            .scaleEffect(0.82)
+            .scaleEffect(0.74)
             .disabled(
                 appIsBusy || storeIsBusy || legacyReceipt != nil || hasUnclassifiedTransaction
             )
@@ -876,8 +841,8 @@ private struct PatchModuleToggle: View {
                 : "patch.module_ready"))
         }
         .padding(.horizontal, 1)
-        .padding(.vertical, 2)
-        .frame(width: 92)
+        .padding(.vertical, 1)
+        .frame(width: 82)
         .confirmationDialog(
             language.text("patch.restore_changed_title"),
             isPresented: $showChangedRestoreConfirmation,
