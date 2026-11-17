@@ -137,26 +137,28 @@ struct PatchProjectsView: View {
                     .strokeBorder(Color.gray.opacity(0.22), lineWidth: 0.8)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(
-                        AngularGradient(
-                            gradient: Gradient(colors: [
-                                .clear,
-                                Color.gray.opacity(0.18),
-                                Color.gray.opacity(0.92),
-                                Color.gray.opacity(0.42),
-                                .clear
-                            ]),
-                            center: .center,
-                            startAngle: .degrees(activityOrbitDegrees),
-                            endAngle: .degrees(activityOrbitDegrees + 360)
-                        ),
-                        lineWidth: 1.25
-                    )
-                    .animation(
-                        reduceMotion ? nil : .linear(duration: 2.4).repeatForever(autoreverses: false),
-                        value: activityOrbitDegrees
-                    )
+                AngularGradient(
+                    gradient: Gradient(colors: [
+                        .clear,
+                        Color.gray.opacity(0.18),
+                        Color.gray.opacity(0.92),
+                        Color.gray.opacity(0.42),
+                        .clear
+                    ]),
+                    center: .center,
+                    startAngle: .degrees(0),
+                    endAngle: .degrees(360)
+                )
+                .rotationEffect(.degrees(activityOrbitDegrees))
+                .mask {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(.white, lineWidth: 1.25)
+                }
+                .shadow(color: Color.gray.opacity(0.42), radius: 3)
+                .animation(
+                    reduceMotion ? nil : .linear(duration: 2.4).repeatForever(autoreverses: false),
+                    value: activityOrbitDegrees
+                )
             }
             .shadow(color: .black.opacity(0.32), radius: 8, y: 3)
         }
@@ -606,19 +608,6 @@ struct PatchProjectsView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
-                    if !rule.replacementFilename.isEmpty,
-                       rule.replacementFilename != project.name {
-                        Text(rule.replacementFilename)
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Text(rule.relativePath)
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.secondary.opacity(0.85))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -715,15 +704,6 @@ private struct PatchProjectRow: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                InstalledContentKindBadge(kind: .patch, language: language)
-                if let author = item.project?.author, !author.isEmpty {
-                    Text(language.text("patch.by_author", author))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text(rowDetail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             Spacer()
             if item.summary.isPasswordProtected {
@@ -754,21 +734,6 @@ private struct PatchProjectRow: View {
                 .strokeBorder(Color.white.opacity(0.30), lineWidth: 0.8)
         }
         .shadow(color: .black.opacity(0.45), radius: 6, y: 2)
-    }
-
-    private var rowDetail: String {
-        if item.isLocked {
-            return language.text("patch.tap_to_unlock")
-        }
-        if item.project?.isPrivate == true, !item.isAuthorCopy {
-            return language.text("patch.private_received")
-        }
-        return language.text(
-            item.summary.schemaVersion >= 2
-                ? "patch.workspace_items_count"
-                : "patch.rules_count",
-            Int64((item.project?.rules.count ?? 0) + (item.project?.directories.count ?? 0))
-        )
     }
 }
 
