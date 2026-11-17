@@ -222,6 +222,7 @@
 "patch.unlocked_message" = "Đã mở khóa. Thiết bị này sẽ không hỏi lại mật khẩu của gói này.";
 "patch.workspace_synced_message" = "Đã đồng bộ workspace của patch.";
 "patch.applied_message" = "Đã áp dụng mọi quy tắc và sao lưu các file gốc.";
+"patch.module_applied_message" = "Mô-đun này đã được áp dụng và file gốc đã được sao lưu.";
 "patch.restored_message" = "Đã khôi phục các file gốc.";
 "patch.reset_message" = "Đã đặt lại mọi file về trạng thái của gói lúc Apply.";
 "patch.error.unsupported_format" = "Đây không phải là gói patch .3106 hợp lệ.";

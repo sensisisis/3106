@@ -222,6 +222,7 @@
 "patch.unlocked_message" = "Unlocked. This device will not ask for this package password again.";
 "patch.workspace_synced_message" = "The patch workspace was synchronized.";
 "patch.applied_message" = "All patch rules were applied and the originals were backed up.";
+"patch.module_applied_message" = "This module was applied and its original file was backed up.";
 "patch.restored_message" = "The original files were restored.";
 "patch.reset_message" = "All patch files were reset to the applied package state.";
 "patch.error.unsupported_format" = "This is not a valid .3106 patch package.";
