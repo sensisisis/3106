@@ -71,11 +71,11 @@ struct PatchProjectsView: View {
     }
 
     private var hasLocalContent: Bool {
-        !store.items.isEmpty || !wallpaperPackages.isEmpty
+        !store.items.isEmpty
     }
 
     private var hasSearchResults: Bool {
-        !filteredItems.isEmpty || !filteredWallpaperPackages.isEmpty
+        !filteredItems.isEmpty
     }
 
     init(
@@ -95,7 +95,7 @@ struct PatchProjectsView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 AuraConsoleHeader(
-                    title: language.text("tab.installed"),
+                    title: language.text("home.card.patches"),
                     subtitle: "PATCH CONTROL / MODULES",
                     systemImage: "square.stack.3d.up.fill"
                 )
@@ -105,12 +105,12 @@ struct PatchProjectsView: View {
 
                 AppSearchField(
                     text: $searchText,
-                    prompt: language.text("installed.search"),
+                    prompt: language.text("patch.search"),
                     clearLabel: language.text("common.clear")
                 )
                 Divider()
                 List {
-                    if !hasLocalContent && (store.isBusy || isImportingWallpapers) {
+                    if !hasLocalContent && store.isBusy {
                         loadingState
                             .listRowSeparator(.hidden)
                     } else if !hasLocalContent {
@@ -129,44 +129,6 @@ struct PatchProjectsView: View {
                                     offsets.map { filteredItems[$0] }.forEach(store.delete)
                                 }
                             }
-                        }
-                        if !filteredWallpaperPackages.isEmpty {
-                            Section(language.text("tab.wallpapers")) {
-                                ForEach(filteredWallpaperPackages) { package in
-                                    NavigationLink {
-                                        InstalledWallpaperPackageDetailView(
-                                            package: package,
-                                            onApplied: reloadWallpaperPackages
-                                        )
-                                    } label: {
-                                        wallpaperRow(package)
-                                    }
-                                    .swipeActions(
-                                        edge: .trailing,
-                                        allowsFullSwipe: false
-                                    ) {
-                                        Button(role: .destructive) {
-                                            wallpaperPendingDeletion = package
-                                        } label: {
-                                            Label(
-                                                language.text("common.delete"),
-                                                systemImage: "trash"
-                                            )
-                                        }
-                                    }
-                                    .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                }
-                            }
-                        }
-                    }
-                    if cleanerEnabled {
-                        Section(language.text("repository.utilities")) {
-                            cleanerRow
-                                .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
                         }
                     }
                 }
@@ -190,29 +152,16 @@ struct PatchProjectsView: View {
                         } label: {
                             Label(language.text("patch.import"), systemImage: "square.and.arrow.down")
                         }
-                        Button {
-                            showWallpaperImporter = true
-                        } label: {
-                            Label(
-                                language.text("wallpaper.import"),
-                                systemImage: "photo.badge.plus"
-                            )
-                        }
                     } label: {
-                        if store.isBusy || isImportingWallpapers {
+                        if store.isBusy {
                             ProgressView()
                         } else {
                             Image(systemName: "plus")
                         }
                     }
-                    .disabled(store.isBusy || isImportingWallpapers)
+                    .disabled(store.isBusy)
                     .accessibilityLabel(language.text("patch.add"))
                 }
-                AppUtilityToolbar(
-                    language: language,
-                    onOpenSettings: onOpenSettings,
-                    onOpenLogs: onOpenLogs
-                )
             }
             .sheet(isPresented: $showImporter) {
                 FileDocumentPicker(
@@ -239,9 +188,6 @@ struct PatchProjectsView: View {
                     store.create(project: project, password: password)
                 }
             }
-            .sheet(isPresented: $showCleaner) {
-                CleanerView()
-            }
             .sheet(item: $draftCoordinator.request) { request in
                 PatchProjectEditorView(
                     existingProject: nil,
@@ -252,47 +198,7 @@ struct PatchProjectsView: View {
                     draftCoordinator.clear()
                 }
             }
-            .sheet(isPresented: $showWallpaperImporter) {
-                FileDocumentPicker(
-                    allowedContentTypes: WallpaperPackagePickerPolicy.allowedContentTypes,
-                    copiesSelectedDocument: true,
-                    allowsMultipleSelection: true,
-                    onSelection: { result in
-                        showWallpaperImporter = false
-                        if case .success(let urls) = result, !urls.isEmpty {
-                            importWallpaperPackages(urls)
-                        }
-                    },
-                    onCancel: {
-                        showWallpaperImporter = false
-                    }
-                )
-                .ignoresSafeArea()
-            }
-            .alert(item: $wallpaperImportFeedback) { feedback in
-                Alert(
-                    title: Text(language.text(feedback.titleKey)),
-                    message: Text(feedback.message),
-                    dismissButton: .default(Text(language.text("common.ok")))
-                )
-            }
-            .alert(item: $wallpaperPendingDeletion) { package in
-                Alert(
-                    title: Text(language.text("wallpaper.delete_title")),
-                    message: Text(language.text(
-                        "wallpaper.delete_message",
-                        package.displayName
-                    )),
-                    primaryButton: .destructive(
-                        Text(language.text("common.delete"))
-                    ) {
-                        deleteWallpaperPackage(package)
-                    },
-                    secondaryButton: .cancel(Text(language.text("common.cancel")))
-                )
-            }
             .onAppear {
-                reloadWallpaperPackages()
                 consumeExternalImport()
 #if targetEnvironment(simulator)
                 if ProcessInfo.processInfo.arguments.contains(

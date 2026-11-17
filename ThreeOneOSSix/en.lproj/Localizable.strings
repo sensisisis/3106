@@ -723,6 +723,7 @@
 "backup.detail.reason" = "Source";
 "settings.backup" = "Backup & Restore";
 "tab.features" = "Features";
+"tab.compatibility" = "Compatible iOS";
 "home.status" = "Status";
 "home.version" = "Version";
 "home.backend" = "Access backend";

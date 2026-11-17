@@ -162,13 +162,7 @@ struct ContentView: View {
     private func sectionContent(_ section: AppSection) -> some View {
         switch section {
         case .home:
-            FeatureHubView(
-                onSelectTab: { section in
-                    tabNavigation.select(section.rawValue)
-                },
-                onOpenSettings: openSettings,
-                onOpenLogs: openLogs
-            )
+            FeatureHubView()
         case .new:
             RepositoryNewView(
                 onOpenSettings: openSettings,
@@ -180,10 +174,7 @@ struct ContentView: View {
                 onOpenLogs: openLogs
             )
         case .installed:
-            PatchProjectsView(
-                onOpenSettings: openSettings,
-                onOpenLogs: openLogs
-            )
+            PatchProjectsView()
         case .files:
             AppDataBrowserView(
                 tabSession: filesTabSession,
@@ -223,7 +214,7 @@ struct ContentView: View {
 
     private var featureVisibility: FeatureVisibility {
         FeatureVisibility(
-            selectedSections: [.home, .files, .search, .cleaner, .wallpapers],
+            selectedSections: [.home, .installed],
             wallpapersSupported: WallpaperFeatureSupportPolicy.isSupported(
                 major: AppInfo.versionTuple.major
             ),

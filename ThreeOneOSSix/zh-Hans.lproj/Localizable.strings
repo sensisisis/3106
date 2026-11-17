@@ -723,6 +723,7 @@
 "backup.detail.reason" = "来源";
 "settings.backup" = "备份与恢复";
 "tab.features" = "功能";
+"tab.compatibility" = "兼容的 iOS 版本";
 "home.status" = "运行状态";
 "home.version" = "版本";
 "home.backend" = "访问后端";

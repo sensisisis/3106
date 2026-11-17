@@ -723,6 +723,7 @@
 "backup.detail.reason" = "Nguồn";
 "settings.backup" = "Sao lưu và khôi phục";
 "tab.features" = "Tính năng";
+"tab.compatibility" = "iOS tương thích";
 "home.status" = "Trạng thái";
 "home.version" = "Phiên bản";
 "home.backend" = "Backend truy cập";
