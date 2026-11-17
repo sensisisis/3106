@@ -38,13 +38,21 @@ xcrun simctl status_bar "$DEVICE" override --time '7:45' \
   --dataNetwork wifi --wifiMode active --wifiBars 3 \
   --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 69
 
-echo 'Capturing four-row design with simulator-only visual fixtures'
+echo 'Checking native orbit with normal motion'
 xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design
-sleep 5
+sleep 3
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/installed-four-modules.png"
 sleep 0.4
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/activity-orbit-next-frame.png"
-echo 'Recording the real silver orbit for motion-quality review'
+xcrun simctl terminate "$DEVICE" "$BUNDLE"
+
+echo 'Checking that Reduce Motion still has a moving perimeter'
+xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design --simulate-orbit-reduce-motion
+sleep 2
+xcrun simctl io "$DEVICE" screenshot "$OUTPUT/reduced-motion-first.png"
+sleep 0.4
+xcrun simctl io "$DEVICE" screenshot "$OUTPUT/reduced-motion-next.png"
+echo 'Recording the real native orbit with Reduce Motion enabled'
 python3 - "$DEVICE" "$OUTPUT" <<'PY'
 import os,signal,subprocess,sys,time
 from pathlib import Path
@@ -52,14 +60,12 @@ device,output=sys.argv[1:]
 output=Path(output)
 video=output/'activity-silver-orbit.mp4'
 with (output/'recording.log').open('w') as log:
-    # A foreground Python child does not inherit Bash's ignored SIGINT from
-    # an asynchronous command. Signal the whole group in case xcrun forks.
     process=subprocess.Popen(
         ['xcrun','simctl','io',device,'recordVideo','--codec=h264',str(video)],
         stdout=log,stderr=subprocess.STDOUT,start_new_session=True
     )
     try:
-        time.sleep(6)
+        time.sleep(7)
         if process.poll() is None:
             os.killpg(process.pid,signal.SIGINT)
         process.wait(timeout=20)
@@ -72,23 +78,20 @@ with (output/'recording.log').open('w') as log:
             process.wait(timeout=5)
         video.unlink(missing_ok=True)
         log.write('\nVideo finalization timed out; screenshots remain valid.\n')
-        print('NOTE: optional video timed out; continuing screenshot checks')
+        print('NOTE: optional video timed out; continuing movement checks')
 PY
+
+echo 'Checking orbit resumes when returning from another app'
+xcrun simctl launch "$DEVICE" com.apple.Preferences
+sleep 1
+xcrun simctl launch "$DEVICE" "$BUNDLE"
+sleep 1
+xcrun simctl io "$DEVICE" screenshot "$OUTPUT/resumed-motion-first.png"
+sleep 0.4
+xcrun simctl io "$DEVICE" screenshot "$OUTPUT/resumed-motion-next.png"
 xcrun simctl terminate "$DEVICE" "$BUNDLE"
-echo 'Capturing single-row design matching the reported layout'
+echo 'Capturing single-row design'
 xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design --simulate-installed-single
-sleep 3
+sleep 2
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/installed-single-module.png"
-python3 - "$OUTPUT" <<'PY'
-import os,struct,sys
-from pathlib import Path
-p=Path(sys.argv[1])
-for name in ['installed-four-modules.png','activity-orbit-next-frame.png','installed-single-module.png']:
-    data=(p/name).read_bytes()
-    assert data[:8]==b'\x89PNG\r\n\x1a\n'
-    width,height=struct.unpack('>II',data[16:24])
-    assert (width,height)==(828,1792),(name,width,height)
-    print(f'PASS: {name}: {width}x{height}, {len(data)} bytes')
-assert (p/'installed-four-modules.png').read_bytes() != (p/'activity-orbit-next-frame.png').read_bytes(), 'Animation frames did not change'
-print('PASS: activity animation produces different real simulator frames')
-PY
+swift "$ROOT/Tests/check_orbit_frames.swift" "$OUTPUT"

@@ -39,9 +39,9 @@ jobs:
           BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
           mkdir Payload
           cp -R "$APP" Payload/
-          zip -qry "3106-${VERSION}-unsigned.ipa" Payload
-          shasum -a 256 "3106-${VERSION}-unsigned.ipa"
-          echo "IPA=3106-${VERSION}-unsigned.ipa" >> "$GITHUB_ENV"
+          zip -qry "3106-${VERSION}-build${BUILD}-unsigned.ipa" Payload
+          shasum -a 256 "3106-${VERSION}-build${BUILD}-unsigned.ipa"
+          echo "IPA=3106-${VERSION}-build${BUILD}-unsigned.ipa" >> "$GITHUB_ENV"
           echo "IPA_VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "IPA_BUILD=${BUILD}" >> "$GITHUB_ENV"
 
@@ -74,7 +74,7 @@ jobs:
 
   installed-design-preview:
     runs-on: macos-15-intel
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Capture Installed design in iPhone simulator

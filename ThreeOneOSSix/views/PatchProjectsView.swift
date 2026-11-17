@@ -217,88 +217,19 @@ struct PatchProjectsView: View {
     }
 
     private var activityOrbitMotion: some View {
-        TimelineView(
-            .animation(
-                minimumInterval: 1.0 / 60.0,
-                paused: reduceMotion
-            )
-        ) { timeline in
-            // Constant perimeter speed, one clockwise lap every two seconds.
-            // Reduced Motion keeps a stationary silver highlight, not a slower loop.
-            let progress = reduceMotion ? 0.18 : timeline.date.timeIntervalSinceReferenceDate
-                .truncatingRemainder(dividingBy: 2.0) / 2.0
-            Canvas(opaque: false, colorMode: .linear, rendersAsynchronously: true) { context, size in
-                let bounds = CGRect(origin: .zero, size: size).insetBy(dx: 1.6, dy: 1.6)
-                let perimeter = RoundedRectangle(cornerRadius: 10.4, style: .continuous)
-                    .path(in: bounds)
-                context.stroke(
-                    perimeter,
-                    with: .color(Color(white: 0.32).opacity(0.38)),
-                    lineWidth: 0.7
-                )
-                // Blur the complete trail in one compositing layer; no colored glow.
-                context.drawLayer { halo in
-                    halo.addFilter(.blur(radius: reduceMotion ? 2.5 : 4.0))
-                    drawActivitySilverTrail(
-                        context: &halo, perimeter: perimeter, progress: progress, halo: true
-                    )
-                }
-                drawActivitySilverTrail(
-                    context: &context, perimeter: perimeter, progress: progress, halo: false
-                )
-                // Thin polished highlight: dimensional, without a broad white bar.
-                let glint = activityOrbitSegment(
-                    perimeter: perimeter, start: progress + 0.184, length: 0.016
-                )
-                context.stroke(
-                    glint,
-                    with: .color(Color(white: 0.92).opacity(0.92)),
-                    style: StrokeStyle(lineWidth: 0.85, lineCap: .round)
-                )
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        NativeActivitySilverOrbit(reduceMotion: orbitUsesReducedMotion)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
-    private func drawActivitySilverTrail(
-        context: inout GraphicsContext,
-        perimeter: Path,
-        progress: Double,
-        halo: Bool
-    ) {
-        // Small overlapping samples yield a smooth graphite-to-silver fade,
-        // including at the path's closing seam, without a large SwiftUI view tree.
-        let samples = 36
-        let step = 0.20 / Double(samples)
-        for index in 0..<samples {
-            let intensity = Double(index + 1) / Double(samples)
-            let fade = pow(intensity, 1.7)
-            let segment = activityOrbitSegment(
-                perimeter: perimeter,
-                start: progress + Double(index) * step,
-                length: step + 0.00015
-            )
-            let shade = halo ? 0.66 : 0.36 + 0.50 * intensity
-            let opacity = halo ? 0.32 * fade : 0.04 + 0.88 * fade
-            context.stroke(
-                segment,
-                with: .color(Color(white: shade).opacity(opacity)),
-                style: StrokeStyle(lineWidth: halo ? 5.2 : 1.9, lineCap: halo ? .round : .butt)
-            )
+    private var orbitUsesReducedMotion: Bool {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-orbit-reduce-motion") {
+            return true
         }
-    }
-
-    private func activityOrbitSegment(perimeter: Path, start: Double, length: Double) -> Path {
-        let fraction = start.truncatingRemainder(dividingBy: 1.0)
-        let from = CGFloat(fraction < 0 ? fraction + 1.0 : fraction)
-        let to = from + CGFloat(length)
-        var segment = perimeter.trimmedPath(from: from, to: min(to, 1.0))
-        if to > 1.0 + 0.0000001 {
-            segment.addPath(perimeter.trimmedPath(from: 0, to: to - 1.0))
-        }
-        return segment
+#endif
+        return reduceMotion
     }
 
     private var activityLogIcon: some View {
@@ -1939,4 +1870,179 @@ private struct PatchActivityView: UIViewControllerRepresentable {
         _ uiViewController: UIActivityViewController,
         context: Context
     ) {}
+}
+
+// This decorative border uses the iOS display clock directly. It does not rely
+// on SwiftUI's animation TimelineView scheduler or an async Canvas snapshot.
+private struct NativeActivitySilverOrbit: UIViewRepresentable {
+    let reduceMotion: Bool
+
+    func makeUIView(context: Context) -> ActivitySilverOrbitUIView {
+        let view = ActivitySilverOrbitUIView(frame: .zero)
+        view.configure(reduceMotion: reduceMotion)
+        return view
+    }
+
+    func updateUIView(_ uiView: ActivitySilverOrbitUIView, context: Context) {
+        uiView.configure(reduceMotion: reduceMotion)
+    }
+
+    static func dismantleUIView(_ uiView: ActivitySilverOrbitUIView, coordinator: ()) {
+        uiView.stopAnimating()
+    }
+}
+
+private final class ActivitySilverOrbitFrameTarget: NSObject {
+    weak var view: ActivitySilverOrbitUIView?
+
+    init(view: ActivitySilverOrbitUIView) {
+        self.view = view
+    }
+
+    @objc func tick(_ link: CADisplayLink) {
+        view?.advanceFrame(at: link.targetTimestamp)
+    }
+}
+
+private final class ActivitySilverOrbitUIView: UIView {
+    private var displayLink: CADisplayLink?
+    private var perimeter = Path()
+    private var clockOrigin = CACurrentMediaTime()
+    private var lapDuration: CFTimeInterval = 2.0
+    private var phase = 0.0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = false
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        contentScaleFactor = UIScreen.main.scale
+        layer.drawsAsynchronously = false
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(resumeAfterForeground),
+            name: UIApplication.didBecomeActiveNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(pauseWhileBackgrounded),
+            name: UIApplication.willResignActiveNotification, object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        displayLink?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    func configure(reduceMotion: Bool) {
+        // The user explicitly requested a moving perimeter. Reduced Motion
+        // attenuates its speed/glow instead of replacing it with a static line.
+        let newDuration: CFTimeInterval = reduceMotion ? 3.2 : 2.0
+        guard newDuration != lapDuration else { return }
+        let now = CACurrentMediaTime()
+        clockOrigin = now - phase * newDuration
+        lapDuration = newDuration
+        setNeedsDisplay()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            stopAnimating()
+        } else {
+            startAnimating()
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let rect = bounds.insetBy(dx: 1.6, dy: 1.6)
+        guard rect.width > 0, rect.height > 0 else { return }
+        perimeter = RoundedRectangle(cornerRadius: 10.4, style: .continuous).path(in: rect)
+        setNeedsDisplay()
+    }
+
+    private func startAnimating() {
+        guard window != nil else { return }
+        clockOrigin = CACurrentMediaTime() - phase * lapDuration
+        if displayLink == nil {
+            let target = ActivitySilverOrbitFrameTarget(view: self)
+            let link = CADisplayLink(target: target, selector: #selector(ActivitySilverOrbitFrameTarget.tick(_:)))
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        }
+        displayLink?.isPaused = UIApplication.shared.applicationState != .active
+        advanceFrame(at: CACurrentMediaTime())
+    }
+
+    func stopAnimating() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    @objc private func resumeAfterForeground() {
+        startAnimating()
+    }
+
+    @objc private func pauseWhileBackgrounded() {
+        displayLink?.isPaused = true
+    }
+
+    func advanceFrame(at timestamp: CFTimeInterval) {
+        let now = timestamp > 0 ? timestamp : CACurrentMediaTime()
+        phase = max(0, now - clockOrigin).truncatingRemainder(dividingBy: lapDuration) / lapDuration
+        setNeedsDisplay()
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard !perimeter.isEmpty, let context = UIGraphicsGetCurrentContext() else { return }
+        context.setShouldAntialias(true)
+        context.setStrokeColor(UIColor(white: 0.32, alpha: 0.38).cgColor)
+        context.setLineWidth(0.7)
+        context.addPath(perimeter.cgPath)
+        context.strokePath()
+
+        // One composited monochrome shadow, not a separate blur per sample.
+        context.saveGState()
+        context.setShadow(
+            offset: .zero, blur: lapDuration > 2.0 ? 2.5 : 4.0,
+            color: UIColor(white: 0.66, alpha: 0.36).cgColor
+        )
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        context.setShadow(offset: .zero, blur: 0, color: nil)
+        let samples = 36
+        let step = 0.20 / Double(samples)
+        context.setLineWidth(1.9)
+        context.setLineCap(.butt)
+        for index in 0..<samples {
+            let intensity = Double(index + 1) / Double(samples)
+            let opacity = 0.04 + 0.88 * pow(intensity, 1.7)
+            context.setStrokeColor(UIColor(white: CGFloat(0.36 + 0.50 * intensity), alpha: CGFloat(opacity)).cgColor)
+            context.addPath(segment(start: phase + Double(index) * step, length: step + 0.00015).cgPath)
+            context.strokePath()
+        }
+        context.endTransparencyLayer()
+        context.restoreGState()
+
+        context.setStrokeColor(UIColor(white: 0.92, alpha: 0.92).cgColor)
+        context.setLineWidth(1.15)
+        context.setLineCap(.round)
+        context.addPath(segment(start: phase + 0.18, length: 0.02).cgPath)
+        context.strokePath()
+    }
+
+    private func segment(start: Double, length: Double) -> Path {
+        let fraction = start.truncatingRemainder(dividingBy: 1.0)
+        let from = CGFloat(fraction < 0 ? fraction + 1.0 : fraction)
+        let to = from + CGFloat(length)
+        var piece = perimeter.trimmedPath(from: from, to: min(to, 1.0))
+        if to > 1.0 + 0.0000001 {
+            piece.addPath(perimeter.trimmedPath(from: 0, to: to - 1.0))
+        }
+        return piece
+    }
 }
