@@ -10,7 +10,8 @@ struct ThreeOneOSSixApp: App {
     @StateObject private var repositoryStore = PackageRepositoryStore()
     @StateObject private var migrationTaskCenter = MigrationTaskCenter()
     @AppStorage(AppLanguage.storageKey) private var languageCode = AppLanguage.english.rawValue
-    @State private var showOnboarding = OnboardingStore.shouldShow()
+    // Fax Aura opens at the license login, without compatibility onboarding.
+    @State private var showOnboarding = false
     @State private var showAttribution = false
     @State private var updateOffer: AppUpdateChecker.Offer?
     @State private var configImportError: String?
@@ -69,7 +70,7 @@ struct ThreeOneOSSixApp: App {
 
     private func checkForUpdate() {
 #if targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return }
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") || ProcessInfo.processInfo.arguments.contains("--simulate-login-design") { return }
 #endif
         Task {
             guard let offer = await AppUpdateChecker.check() else { return }
@@ -81,7 +82,7 @@ struct ThreeOneOSSixApp: App {
     /// (persisted), so repeated quick app switches cost nothing.
     private func checkForUpdateThrottled() {
 #if targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return }
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") || ProcessInfo.processInfo.arguments.contains("--simulate-login-design") { return }
 #endif
         Task {
             guard let offer = await AppUpdateChecker.throttledForegroundCheck() else { return }

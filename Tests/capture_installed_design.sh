@@ -95,3 +95,15 @@ xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design --simulate-i
 sleep 2
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/installed-single-module.png"
 swift "$ROOT/Tests/check_orbit_frames.swift" "$OUTPUT"
+
+echo 'Capturing Fax Aura settings using real simulator device information'
+xcrun simctl terminate "$DEVICE" "$BUNDLE"
+xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design --simulate-settings
+sleep 3
+xcrun simctl io "$DEVICE" screenshot "$OUTPUT/fax-aura-settings.png"
+xcrun simctl terminate "$DEVICE" "$BUNDLE"
+
+echo 'Capturing the unauthenticated Fax Aura login without onboarding'
+xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-login-design
+sleep 3
+xcrun simctl io "$DEVICE" screenshot "$OUTPUT/fax-aura-login.png"

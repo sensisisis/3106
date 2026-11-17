@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showLogs = false
     @State private var showAppGroupAlert = false
+    @AppStorage("faxAura.ledLightingEnabled") private var ledLightingEnabled = false
     @StateObject private var scanCoordinator = ScanCoordinator()
     @StateObject private var licenseSession = LicenseSession()
 
@@ -96,12 +97,25 @@ struct ContentView: View {
             Text(language.text("appgroup.message"))
         }
         .environmentObject(scanCoordinator)
-        .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showSettings) { SettingsView(session: licenseSession) }
         .sheet(isPresented: $showLogs) { LogView() }
         .sheet(isPresented: $scanCoordinator.isPresented) {
             ScanProgressSheet()
                 .environmentObject(scanCoordinator)
                 .environment(\.appLanguage, language)
+        }
+        .overlay {
+            if ledLightingEnabled && showsInstalledContent {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(
+                        LinearGradient(colors: [.cyan.opacity(0.55), .purple.opacity(0.45), .pink.opacity(0.50)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: 1
+                    )
+                    .shadow(color: .purple.opacity(0.20), radius: 12)
+                    .padding(5)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
         .overlay(alignment: .bottom) {
             if scanCoordinator.isRunning && !scanCoordinator.isPresented {

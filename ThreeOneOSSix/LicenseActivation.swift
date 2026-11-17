@@ -21,6 +21,21 @@ final class LicenseSession: ObservableObject {
     @Published private(set) var isAuthorized = false
     @Published private(set) var notice: String?
 
+    var expirationDate: Date? {
+        guard let timestamp = UserDefaults.standard.object(forKey: expirationStorage) as? Double,
+              timestamp.isFinite, timestamp > 0 else { return nil }
+        return Date(timeIntervalSince1970: timestamp)
+    }
+
+    var hasStoredLicense: Bool {
+        guard let key = storedKey else { return false }
+        return !key.isEmpty && storedSessionVersion(for: normalized(key)) != nil
+    }
+
+    var isPermanentLicense: Bool {
+        isAuthorized && hasStoredLicense && expirationDate == nil
+    }
+
     private let sessionVersionStorage = "3106.supabase.license.session-version"
     private let fallbackDeviceIDStorage = "3106.supabase.license.fallback-device-id"
     private let expirationStorage = "3106.supabase.license.expires-at"
@@ -518,227 +533,348 @@ struct LicenseActivationView: View {
     @State private var key = ""
     @State private var isLoading = false
     @State private var messageKey: String?
+    @State private var isKeyVisible = false
 
     let sessionNotice: String?
     let onActivate: (String) async -> LicenseActivationResult
+
+    private var canActivate: Bool {
+        !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isLoading
+    }
 
     var body: some View {
         ZStack {
             Color.black
                 .ignoresSafeArea()
-            LinearGradient(
-                colors: [Color.black, Color(white: 0.09), Color.black],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
 
-            Circle()
-                .fill(AppTheme.accent.opacity(0.11))
-                .frame(width: 300, height: 300)
-                .blur(radius: 90)
-                .offset(x: 120, y: -260)
-                .accessibilityHidden(true)
-
-            ScrollView {
-                VStack(spacing: 24) {
-                    brandHeader
-                    activationCard
-                    footer
+            GeometryReader { geometry in
+                ScrollView {
+                    activationShell
+                        .frame(maxWidth: 480)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 24)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: geometry.size.height, alignment: .center)
                 }
-                .frame(maxWidth: 410)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 28)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: UIScreen.main.bounds.height * 0.86)
+                .scrollDismissesKeyboard(.interactively)
             }
-            .scrollDismissesKeyboard(.interactively)
         }
         .preferredColorScheme(.dark)
     }
 
-    private var brandHeader: some View {
-        VStack(spacing: 14) {
-            AppLogo(size: 88)
-
-            VStack(spacing: 4) {
-                Text("3106")
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .tracking(1.6)
-                    .foregroundStyle(.white)
-                Text(language.text("license.brand_subtitle"))
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(1.2)
-                    .foregroundStyle(.white.opacity(0.55))
-            }
-
-            HStack(spacing: 8) {
-                Rectangle()
-                    .fill(AppTheme.accent.opacity(0.42))
-                    .frame(width: 28, height: 1)
-                HStack(spacing: 6) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(language.text("license.secure_badge"))
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .tracking(0.6)
-                }
-                .foregroundStyle(.white.opacity(0.82))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(.white.opacity(0.07), in: Capsule())
-                .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
-                Rectangle()
-                    .fill(AppTheme.accent.opacity(0.42))
-                    .frame(width: 28, height: 1)
-            }
-
-            HStack(spacing: 8) {
-                Rectangle()
-                    .fill(AppTheme.accent.opacity(0.9))
-                    .frame(width: 28, height: 2)
-                Text(language.text("license.eyebrow"))
-                    .font(.system(size: 10, weight: .black, design: .monospaced))
-                    .tracking(1.8)
-                    .foregroundStyle(AppTheme.accent)
-                Rectangle()
-                    .fill(AppTheme.accent.opacity(0.35))
-                    .frame(width: 28, height: 1)
-            }
+    private var activationShell: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            systemHeader
+            activityBanner
+                .padding(.top, 20)
+            activationContent
+            sessionFooter
         }
-        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(
+            Color(red: 0.095, green: 0.095, blue: 0.102),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.52), lineWidth: 1)
+        }
+        .shadow(color: .white.opacity(0.16), radius: 24, y: 0)
+        .shadow(color: .black.opacity(0.80), radius: 34, y: 18)
     }
 
-    private var activationCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(language.text("license.title"))
-                        .font(.system(size: 27, weight: .bold, design: .rounded))
+    private var systemHeader: some View {
+        HStack(spacing: 11) {
+            AppLogo(size: 36)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("FAX AURA")
+                    .font(.system(size: 17, weight: .black, design: .monospaced))
+                    .tracking(2.4)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Text("PRIVATE CONTROL CENTER")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(1.05)
+                    .foregroundStyle(.white.opacity(0.52))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(.white)
+                    .frame(width: 8, height: 8)
+                    .shadow(color: .white.opacity(0.75), radius: 5)
+                Text(isLoading ? "SYSTEM VERIFYING" : "SYSTEM READY")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(0.55)
+                    .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var activityBanner: some View {
+        ZStack(alignment: .bottomLeading) {
+            Image("ActivityHeaderArt")
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.12), .black.opacity(0.92)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("FAX AURA")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .tracking(0.2)
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.7), radius: 4)
+                Text("SECURE ACTIVATION PANEL")
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .tracking(0.85)
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.8), radius: 3)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+        }
+        .frame(maxWidth: .infinity)
+        .aspectRatio(2.8, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.64), lineWidth: 1)
+        }
+        .shadow(color: .white.opacity(0.12), radius: 11, y: 2)
+    }
+
+    private var activationContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("WELCOME BACK")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .tracking(1.7)
+                        .foregroundStyle(.white.opacity(0.85))
+
+                    Text("Enter your key")
+                        .font(.system(size: 29, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
-                    Text(language.text("license.subtitle"))
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.62))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Text("Unlock your private Fax Aura session.")
+                        .font(.system(size: 16, weight: .regular, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.54))
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.black.opacity(0.8))
+                    .frame(width: 25, height: 25)
+                    .background(.white.opacity(0.92), in: Circle())
+                    .shadow(color: .white.opacity(0.2), radius: 8)
+                    .padding(.top, 31)
+                    .accessibilityHidden(true)
+            }
+            .padding(.top, 27)
+
+            HStack {
+                Text("ACCESS KEY")
                 Spacer(minLength: 8)
-                Image(systemName: "key.horizontal.fill")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(width: 46, height: 46)
-                    .background(AppTheme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.accent.opacity(0.24), lineWidth: 1))
+                Text("SECURE INPUT")
             }
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .tracking(1.05)
+            .foregroundStyle(.white.opacity(0.66))
+            .padding(.top, 24)
 
-            VStack(alignment: .leading, spacing: 9) {
-                Text(language.text("license.key_label"))
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .tracking(1.2)
-                    .foregroundStyle(.white.opacity(0.55))
+            keyEntry
+                .padding(.top, 9)
 
-                HStack(spacing: 11) {
-                    Image(systemName: "key.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
-                    SecureField(language.text("license.placeholder"), text: $key)
-                        .textContentType(.oneTimeCode)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .submitLabel(.go)
-                        .focused($keyFieldFocused)
-                        .onSubmit { submitActivation() }
-                        .foregroundStyle(.white)
-                        .accessibilityLabel(language.text("license.key_label"))
-                }
-                .padding(.horizontal, 15)
-                .frame(height: 54)
-                .background(.black.opacity(0.30), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.white.opacity(0.14), lineWidth: 1))
-            }
-
-            Button(action: submitActivation) {
-                HStack(spacing: 10) {
-                    if isLoading {
-                        ProgressView().tint(.black)
-                    } else {
-                        Image(systemName: "lock.open.fill")
-                    }
-                    Text(language.text(isLoading ? "license.verifying" : "license.activate"))
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                    Spacer()
-                    if !isLoading {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 13, weight: .bold))
-                    }
-                }
-                .foregroundStyle(.black)
-                .padding(.horizontal, 17)
-                .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background(
-                    LinearGradient(
-                        colors: [Color.white, Color(white: 0.68)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                )
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.white.opacity(0.40), lineWidth: 1))
-                .shadow(color: .white.opacity(0.18), radius: 16, y: 7)
-            }
-            .buttonStyle(.plain)
-            .disabled(isLoading || key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .opacity(isLoading || !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 1 : 0.55)
+            initializeButton
+                .padding(.top, 20)
 
             if let feedbackKey = messageKey ?? sessionNotice {
                 Label {
                     Text(language.text(feedbackKey))
-                        .font(.caption.weight(.medium))
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption)
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                .foregroundStyle(.white.opacity(0.82))
+                .foregroundStyle(.white.opacity(0.86))
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(.white.opacity(0.18), lineWidth: 1))
+                .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(.white.opacity(0.22), lineWidth: 1)
+                }
+                .padding(.top, 14)
                 .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+    }
+
+    private var keyEntry: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            keyTextField
+
+            Button {
+                isKeyVisible.toggle()
+            } label: {
+                Image(systemName: isKeyVisible ? "eye.slash.fill" : "eye.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .frame(width: 30, height: 40)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isKeyVisible ? "Hide access key" : "Show access key")
+        }
+        .padding(.horizontal, 15)
+        .frame(maxWidth: .infinity)
+        .frame(height: 58)
+        .background(Color.white.opacity(0.045), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.white.opacity(0.55), lineWidth: 1.1)
+        }
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+    }
+
+    @ViewBuilder
+    private var keyTextField: some View {
+        if isKeyVisible {
+            TextField("Enter your key", text: $key)
+                .textContentType(.oneTimeCode)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .submitLabel(.go)
+                .focused($keyFieldFocused)
+                .onSubmit { submitActivation() }
+                .foregroundStyle(.white)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .accessibilityLabel("Access key")
+        } else {
+            SecureField("Enter your key", text: $key)
+                .textContentType(.oneTimeCode)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .submitLabel(.go)
+                .focused($keyFieldFocused)
+                .onSubmit { submitActivation() }
+                .foregroundStyle(.white)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .accessibilityLabel("Access key")
+        }
+    }
+
+    private var initializeButton: some View {
+        Button(action: submitActivation) {
+            HStack(spacing: 10) {
+                if isLoading {
+                    ProgressView()
+                        .tint(.black)
+                }
+
+                Text(isLoading ? "VERIFYING…" : "INITIALIZE SESSION")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .tracking(0.15)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 16, weight: .bold))
+            }
+            .foregroundStyle(canActivate ? Color.black : Color.white.opacity(0.44))
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity)
+            .frame(height: 58)
+            .background {
+                if canActivate {
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white, Color(white: 0.68)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                } else {
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(Color.white.opacity(0.12))
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .stroke(Color.white.opacity(canActivate ? 0.7 : 0.34), lineWidth: 1)
+            }
+            .shadow(color: .white.opacity(canActivate ? 0.18 : 0.04), radius: 13, y: 4)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canActivate)
+        .accessibilityHint("Validates the access key")
+    }
+
+    private var sessionFooter: some View {
+        VStack(spacing: 19) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                Text("PROTECTED SESSION")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(.white.opacity(0.67))
+                Spacer(minLength: 8)
+                Text("FAX AURA")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .tracking(0.75)
+                    .foregroundStyle(.white.opacity(0.8))
             }
 
             HStack(spacing: 8) {
-                Image(systemName: "checkmark.shield.fill")
-                    .foregroundStyle(.white.opacity(0.82))
-                Text(language.text("license.privacy_note"))
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.52))
-                    .fixedSize(horizontal: false, vertical: true)
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+                Text("PROJECT CREATED BY")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.55)
+                    .foregroundStyle(.white.opacity(0.53))
+                Text("SENSIAURA")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .tracking(0.75)
+                    .foregroundStyle(.white.opacity(0.9))
             }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(20)
-        .background(
-            LinearGradient(
-                colors: [Color.white.opacity(0.095), Color.white.opacity(0.035)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 23, style: .continuous)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 23, style: .continuous).stroke(.white.opacity(0.16), lineWidth: 1))
-        .shadow(color: .black.opacity(0.34), radius: 24, y: 12)
-    }
-
-    private var footer: some View {
-        HStack(spacing: 7) {
-            Circle().fill(.white.opacity(0.72)).frame(width: 6, height: 6)
-            Text(language.text("license.footer"))
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.42))
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 2)
+        .padding(.top, 27)
     }
 
     private func submitActivation() {
