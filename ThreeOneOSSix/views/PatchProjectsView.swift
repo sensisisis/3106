@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import ImageIO
 
 private enum PatchPackagePickerPolicy {
     // Export uses the new .3106 extension; .3105 stays importable so existing
@@ -17,6 +18,70 @@ private enum WallpaperPackagePickerPolicy {
     static let allowedContentTypes: [UTType] = [packageType, .data]
 }
 
+private enum FaxAuraGIFAsset {
+    private static let decoded: (frames: [UIImage], duration: TimeInterval) = {
+        guard let url = Bundle.main.url(forResource: "FaxAuraActivity", withExtension: "gif"),
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return ([], 0)
+        }
+        let frameCount = CGImageSourceGetCount(source)
+        guard frameCount > 0 else { return ([], 0) }
+
+        var frames: [UIImage] = []
+        var duration: TimeInterval = 0
+        for index in 0..<frameCount {
+            guard let cgImage = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
+            frames.append(UIImage(cgImage: cgImage))
+
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any]
+            let gifProperties = properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+            let unclampedDelay = (gifProperties?[kCGImagePropertyGIFUnclampedDelayTime] as? NSNumber)?.doubleValue
+            let clampedDelay = (gifProperties?[kCGImagePropertyGIFDelayTime] as? NSNumber)?.doubleValue
+            duration += max(unclampedDelay ?? clampedDelay ?? 0.12, 0.04)
+        }
+        return (frames, duration)
+    }()
+
+    static let still: UIImage? = decoded.frames.first
+    static let animated: UIImage? = {
+        guard decoded.frames.count > 1 else { return still }
+        return UIImage.animatedImage(with: decoded.frames, duration: decoded.duration)
+    }()
+}
+
+private struct FaxAuraAnimatedImage: UIViewRepresentable {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeUIView(context: Context) -> UIImageView {
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        updateImage(in: imageView)
+        return imageView
+    }
+
+    func updateUIView(_ imageView: UIImageView, context: Context) {
+        updateImage(in: imageView)
+    }
+
+    private func updateImage(in imageView: UIImageView) {
+        let fallback = UIImage(named: "ActivityHeaderArt")
+        let image = reduceMotion
+            ? (FaxAuraGIFAsset.still ?? fallback)
+            : (FaxAuraGIFAsset.animated ?? FaxAuraGIFAsset.still ?? fallback)
+        if imageView.image !== image {
+            imageView.image = image
+        }
+
+        if !reduceMotion, let frames = imageView.image?.images, frames.count > 1 {
+            imageView.animationRepeatCount = 0
+            if !imageView.isAnimating { imageView.startAnimating() }
+        } else {
+            imageView.stopAnimating()
+        }
+    }
+}
+
 struct PatchProjectsView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -28,7 +93,7 @@ struct PatchProjectsView: View {
     @State private var showImporter = false
     @State private var showWallpaperImporter = false
     @State private var showCleaner = false
-    @State private var activityPulse = false
+    @State private var activityOrbitDegrees = 0.0
     @State private var wallpaperPackages: [WallpaperStagedPackage] = []
     @State private var wallpaperImportFeedback: WallpaperImportFeedback?
     @State private var wallpaperPendingDeletion: WallpaperStagedPackage?
@@ -103,22 +168,7 @@ struct PatchProjectsView: View {
     private var activityCard: some View {
         Button(action: onOpenLogs) {
             HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.11))
-                    Circle()
-                        .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
-                        .scaleEffect(activityPulse ? 1.35 : 0.78)
-                        .opacity(activityPulse ? 0 : 0.72)
-                    Image(systemName: "waveform.path")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 42, height: 42)
-                .animation(
-                    reduceMotion ? nil : .easeOut(duration: 1.35).repeatForever(autoreverses: false),
-                    value: activityPulse
-                )
+                faxAuraActivityVisual
                 VStack(alignment: .leading, spacing: 3) {
                     Text(language.text("installed.activity"))
                         .font(.system(size: 15, weight: .bold))
@@ -156,8 +206,44 @@ struct PatchProjectsView: View {
         }
         .buttonStyle(.plain)
         .onAppear {
-            activityPulse = !reduceMotion
+            activityOrbitDegrees = reduceMotion ? 0 : 360
         }
+    }
+
+    private var faxAuraActivityVisual: some View {
+        ZStack {
+            FaxAuraAnimatedImage()
+                .frame(width: 88, height: 58)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .accessibilityHidden(true)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(.white.opacity(0.20), lineWidth: 0.7)
+                }
+
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(
+                    AngularGradient(
+                        gradient: Gradient(colors: [
+                            .clear,
+                            Color.white.opacity(0.12),
+                            Color.white,
+                            Color.white.opacity(0.28),
+                            .clear
+                        ]),
+                        center: .center,
+                        startAngle: .degrees(activityOrbitDegrees),
+                        endAngle: .degrees(activityOrbitDegrees + 360)
+                    ),
+                    lineWidth: 1.6
+                )
+                .shadow(color: .white.opacity(0.48), radius: 4)
+                .animation(
+                    reduceMotion ? nil : .linear(duration: 2.4).repeatForever(autoreverses: false),
+                    value: activityOrbitDegrees
+                )
+        }
+        .frame(width: 94, height: 64)
     }
 
     private var moduleStatusPanel: some View {
