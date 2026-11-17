@@ -71,3 +71,17 @@ jobs:
         with:
           name: 3106-unsigned-ipa
           path: "3106-*-unsigned.ipa"
+
+  installed-design-preview:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture Installed design in iPhone simulator
+        run: bash Tests/capture_installed_design.sh
+      - name: Upload real simulator previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-design-preview
+          path: installed-design-preview/

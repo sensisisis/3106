@@ -38,19 +38,58 @@ struct PatchProjectsView: View {
     let onOpenSettings: () -> Void
     let onOpenLogs: () -> Void
 
+    private var isDesignPreview: Bool {
+#if targetEnvironment(simulator)
+        return ProcessInfo.processInfo.arguments.contains("--simulate-installed-design")
+#else
+        return false
+#endif
+    }
+
+    // Visual fixtures never enter the device build or the user's library.
+    private var installedItems: [PatchLibraryItem] {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") {
+            return Self.designPreviewItems
+        }
+#endif
+        return store.items
+    }
+
+#if targetEnvironment(simulator)
+    private static let designPreviewItems: [PatchLibraryItem] = {
+        let names = ProcessInfo.processInfo.arguments.contains("--simulate-installed-single")
+            ? ["Hs Pescoço+Antena"]
+            : ["Aim 60%", "Headtricking 70%", "Aim 100%", "Headtricking 100%"]
+        return names.map { name in
+            let project = PatchProject(name: name, rules: [
+                PatchRule(bundleID: "com.example.visual-preview", relativePath: "preview.txt",
+                          replacementFilename: "preview.txt", replacementData: Data())
+            ])
+            return PatchLibraryItem(
+                summary: PatchPackageSummary(packageID: project.id, schemaVersion: 2,
+                                             isPasswordProtected: false, keyFingerprint: Data()),
+                project: project, contentKey: nil,
+                packageURL: URL(fileURLWithPath: "/visual-preview/\(project.id).3106"),
+                isAuthorCopy: true, origin: nil
+            )
+        }
+    }()
+#endif
+
     private var hasLocalContent: Bool {
-        !store.items.isEmpty
+        !installedItems.isEmpty
     }
 
     private var totalRuleCount: Int {
-        store.items.reduce(0) { count, item in
+        installedItems.reduce(0) { count, item in
             guard item.canInspectContents, let project = item.project else { return count }
             return count + project.rules.count
         }
     }
 
     private var activeRuleCount: Int {
-        store.items.reduce(0) { count, item in
+        installedItems.reduce(0) { count, item in
             guard item.canInspectContents, let project = item.project else { return count }
             if DevicePatchService.latestReceipt(projectID: item.id) != nil {
                 return count + project.rules.count
@@ -70,7 +109,6 @@ struct PatchProjectsView: View {
                     .foregroundStyle(.white)
                 Text("PATCH CONTROL / \(language.text("installed.online"))")
                     .font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .tracking(0.6)
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -82,14 +120,14 @@ struct PatchProjectsView: View {
                 .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.white.opacity(0.52), lineWidth: 0.8))
         }
-        .padding(.horizontal, 3)
+        .padding(.horizontal, 14)
         .padding(.bottom, 2)
         .overlay(alignment: .bottom) {
             HStack(spacing: 5) {
                 Rectangle().fill(Color.white.opacity(0.92)).frame(width: 26, height: 1)
                 Rectangle().fill(Color.white.opacity(0.14)).frame(height: 1)
             }
-            .padding(.horizontal, 3)
+            .padding(.horizontal, 14)
             .offset(y: 3)
         }
     }
@@ -113,7 +151,7 @@ struct PatchProjectsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(.white.opacity(0.76), lineWidth: 1)
+                .stroke(.white.opacity(0.72), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.65), radius: 8, y: 3)
         .accessibilityLabel("Fax Aura")
@@ -123,24 +161,32 @@ struct PatchProjectsView: View {
         Button(action: onOpenLogs) {
             HStack(spacing: 9) {
                 activityLogIcon
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(language.text("installed.activity"))
-                        .font(.system(size: 13, weight: .bold))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Registro de actividad")
+                        .font(.system(size: 15, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
-                    Text(appLog.entries.last ?? language.text("installed.no_recent_activity"))
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
+                    Text(isModuleOperationInProgress
+                         ? "Actualizando función"
+                         : activeRuleCount > 0
+                            ? "\(activeRuleCount) funciones activas"
+                            : "Sistema listo — esperando funciones")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(activityDetail)
+                        .font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(.secondary.opacity(0.90))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                Spacer(minLength: 4)
+                Spacer()
                 Circle()
-                    .fill(isModuleOperationInProgress ? Color.orange : Color.white)
-                    .frame(width: 7, height: 7)
-                    .shadow(color: .white.opacity(0.75), radius: 6)
+                    .fill(Color.white)
+                    .frame(width: 9, height: 9)
+                    .shadow(color: .white, radius: 4)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -149,18 +195,25 @@ struct PatchProjectsView: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),
-                in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.42), lineWidth: 0.8)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.42), lineWidth: 0.9)
             }
-            .overlay {
-                activityOrbitMotion
-            }
-            .shadow(color: .black.opacity(0.32), radius: 8, y: 3)
+            .overlay { activityOrbitMotion }
+            .shadow(color: .black.opacity(0.72), radius: 8, y: 3)
         }
         .buttonStyle(.plain)
+    }
+
+    private var activityDetail: String {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") {
+            return "Sin operaciones recientes"
+        }
+#endif
+        return appLog.entries.last ?? "Sin operaciones recientes"
     }
 
     private var activityOrbitMotion: some View {
@@ -175,7 +228,7 @@ struct PatchProjectsView: View {
                 .truncatingRemainder(dividingBy: lapDuration) / lapDuration
             let cyanGlow = Color(red: 0.48, green: 0.86, blue: 1.0)
             ZStack {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .inset(by: 1.8)
                     .stroke(Color.gray.opacity(0.24), lineWidth: 0.8)
                 activityOrbitStroke(
@@ -218,12 +271,12 @@ struct PatchProjectsView: View {
         let strokeStyle = StrokeStyle(lineWidth: lineWidth, lineCap: .round)
 
         return ZStack {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .inset(by: 1.8)
                 .trim(from: start, to: min(end, 1))
                 .stroke(color, style: strokeStyle)
             if end > 1 {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .inset(by: 1.8)
                     .trim(from: 0, to: end - 1)
                     .stroke(color, style: strokeStyle)
@@ -234,9 +287,10 @@ struct PatchProjectsView: View {
     private var activityLogIcon: some View {
         ZStack {
             Circle()
-                .fill(Color.white.opacity(0.08))
-            Image(systemName: "waveform.path")
-                .font(.system(size: 13, weight: .semibold))
+                .fill(Color.white.opacity(0.28))
+                .shadow(color: .white.opacity(0.18), radius: 5)
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
                 .accessibilityHidden(true)
         }
@@ -246,19 +300,19 @@ struct PatchProjectsView: View {
     private var moduleStatusPanel: some View {
         HStack(spacing: 0) {
             statusMetric(
-                symbol: "square.grid.2x2.fill",
+                symbol: "square.grid.2x2",
                 value: "\(totalRuleCount)",
                 label: language.text("installed.modules")
             )
             statusDivider
             statusMetric(
-                symbol: "dot.radiowaves.left.and.right",
-                value: "\(activeRuleCount)",
-                label: language.text("installed.active")
+                symbol: "antenna.radiowaves.left.and.right",
+                value: "LIVE",
+                label: "LINK"
             )
             statusDivider
             statusMetric(
-                symbol: "checkmark.shield.fill",
+                symbol: "checkmark.shield",
                 value: language.text("installed.safe"),
                 label: language.text("installed.mode")
             )
@@ -284,22 +338,18 @@ struct PatchProjectsView: View {
     }
 
     private func statusMetric(symbol: String, value: String, label: String) -> some View {
-        VStack(spacing: 3) {
-            HStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 10, weight: .semibold))
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white.opacity(0.82))
+            VStack(alignment: .leading, spacing: 0) {
                 Text(value)
-                    .font(.system(size: 12, weight: .black, design: .monospaced))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .foregroundStyle(.white)
+                Text(label.uppercased())
+                    .font(.system(size: 6.5, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary)
             }
-            .foregroundStyle(.white)
-            Text(label.uppercased())
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .tracking(0.4)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
     }
@@ -339,7 +389,7 @@ struct PatchProjectsView: View {
         VStack(spacing: 4) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .bold))
-            Text(language.text(key))
+            Text(language.text(key).uppercased())
                 .font(.system(size: 7, weight: .black, design: .monospaced))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -371,31 +421,61 @@ struct PatchProjectsView: View {
     }
 
     private var functionsHeading: some View {
-        HStack(alignment: .center, spacing: 9) {
-            Capsule()
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(.white)
-                .frame(width: 3, height: 30)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(language.text("installed.functions"))
+                .frame(width: 4, height: 23)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("FUNCTIONS")
                     .font(.system(size: 20, weight: .black, design: .monospaced))
                     .foregroundStyle(.white)
-                Text(language.text("installed.available"))
+                Text("PATCH MODULES / AVAILABLE")
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .tracking(0.4)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.72))
             }
             Spacer(minLength: 4)
-            Text(language.text("installed.active_total", Int64(activeRuleCount), Int64(totalRuleCount)))
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .frame(height: 36)
-                .background(Color.white.opacity(0.08), in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(0.45), lineWidth: 0.8))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+            HStack(spacing: 6) {
+                Text("\(activeRuleCount) activos").foregroundStyle(.white)
+                Text("•").foregroundStyle(.secondary)
+                Text("\(totalRuleCount) total").foregroundStyle(.white)
+            }
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .padding(.horizontal, 10)
+            .frame(height: 36)
+            .background(
+                LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.04)],
+                               startPoint: .top, endPoint: .bottom),
+                in: Capsule()
+            )
+            .overlay(Capsule().stroke(.white.opacity(0.48), lineWidth: 1))
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
         }
-        .padding(.top, 4)
+    }
+
+    private func installedTab(reselect: @escaping () -> Void) -> some View {
+        // Reproduce the reference's floating tab on every supported iOS version,
+        // rather than changing its shape with the SDK's native TabView style.
+        Button(action: reselect) {
+            VStack(spacing: 3) {
+                Image(systemName: "tray.and.arrow.down.fill")
+                    .font(.system(size: 25, weight: .medium))
+                Text(language.text("tab.installed"))
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(Color(red: 0.95, green: 0.12, blue: 0.16))
+            .frame(width: 100, height: 60)
+            .background(Color(white: 0.24), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color(white: 0.10), lineWidth: 3))
+            .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.6))
+            .shadow(color: .black.opacity(0.8), radius: 5, y: 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isSelected)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity)
+        .background(Color.black)
     }
 
     init(
@@ -413,32 +493,71 @@ struct PatchProjectsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+            ScrollViewReader { scroll in
+                VStack(spacing: 0) {
+                    Text(language.text("tab.installed"))
+                        .font(.system(size: 21, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .tracking(0.8)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 31)
                     consoleBrandHeader
                     faxAuraBanner
+                        .padding(.horizontal, 10)
+                        .padding(.top, 6)
                     activityCard
+                        .padding(.horizontal, 12)
+                        .padding(.top, 7)
                     moduleStatusPanel
+                        .padding(.horizontal, 12)
+                        .padding(.top, 5)
                     quickActions
+                        .padding(.horizontal, 12)
+                        .padding(.top, 5)
                     functionsHeading
-
-                    if !hasLocalContent && store.isBusy {
-                        loadingState
-                    } else if !hasLocalContent {
-                        emptyState
-                    } else {
-                        ForEach(store.items) { item in
-                            itemRow(item)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 7)
+                        .padding(.bottom, 1)
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            Color.clear.frame(height: 0).id("installed-list-top")
+                            if !hasLocalContent && store.isBusy {
+                                loadingState
+                            } else if !hasLocalContent {
+                                emptyState
+                            } else {
+                                ForEach(installedItems) { item in
+                                    itemRow(item)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                }
+                            }
+                        }
+                    }
+                    .background(
+                        LinearGradient(colors: [.black, Color(white: 0.018)],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    installedTab {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            scroll.scrollTo("installed-list-top", anchor: .top)
                         }
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 6)
-                .padding(.bottom, 24)
             }
-            .background(AppTheme.pageBackground.ignoresSafeArea())
-            .navigationTitle(language.text("tab.installed"))
-            .navigationBarTitleDisplayMode(.inline)
+            .background(
+                ZStack {
+                    Color.black
+                    RadialGradient(colors: [.white.opacity(0.05), .clear],
+                                   center: .topTrailing, startRadius: 10, endRadius: 430)
+                    LinearGradient(colors: [.clear, .white.opacity(0.018), .clear],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                }
+                .ignoresSafeArea()
+            )
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showImporter) {
                 FileDocumentPicker(
                     allowedContentTypes: PatchPackagePickerPolicy.allowedContentTypes,
@@ -675,52 +794,46 @@ struct PatchProjectsView: View {
         project: PatchProject,
         rule: PatchRule
     ) -> some View {
-        HStack(spacing: 9) {
-            Capsule()
-                .fill(.white)
-                .frame(width: 4, height: 50)
-            HStack(spacing: 9) {
-                Image("ActivityHeaderArt")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 48, height: 48, alignment: .leading)
-                    .clipped()
-                    .background(Color.black, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(.white.opacity(0.42), lineWidth: 0.7)
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        Image(systemName: "shippingbox.fill")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.95), radius: 2)
-                            .padding(4)
-                    }
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(project.name)
-                        .font(.system(size: 14, weight: .bold))
+        HStack(spacing: 10) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Image("OptionCardArt")
+                        .resizable()
+                        .scaledToFill()
+                    LinearGradient(colors: [.black.opacity(0.18), .black.opacity(0.74)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Image(systemName: "shippingbox.fill")
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
+                        .shadow(color: .black, radius: 3)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: 42, height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(.white.opacity(0.84), lineWidth: 0.9))
+                .shadow(color: .white.opacity(0.18), radius: 5)
+                .accessibilityHidden(true)
+                Text(project.name)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                Spacer(minLength: 12)
             }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 4)
 
             PatchModuleToggle(
                 item: item,
                 project: project,
                 rule: rule,
-                storeIsBusy: store.isBusy,
+                storeIsBusy: store.isBusy || isDesignPreview,
                 appIsBusy: $isModuleOperationInProgress,
                 onUpdate: store.reload
             )
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, minHeight: 68)
+        .padding(.vertical, 4)
         .background(
             LinearGradient(
                 colors: [Color.white.opacity(0.105), Color(white: 0.028)],
@@ -732,16 +845,20 @@ struct PatchProjectsView: View {
         .overlay {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.white.opacity(0.28), lineWidth: 0.8)
+                    .stroke(.white.opacity(0.28), lineWidth: 0.8)
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
-                        LinearGradient(
-                            colors: [.white.opacity(0.30), .clear, .white.opacity(0.14)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
+                        LinearGradient(colors: [.white.opacity(0.14), .clear, .white.opacity(0.30)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
                         lineWidth: 1
                     )
+                HStack {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(.white)
+                        .frame(width: 3)
+                        .padding(.vertical, 9)
+                    Spacer()
+                }
             }
         }
         .shadow(color: .black.opacity(0.72), radius: 6, y: 2)
@@ -898,15 +1015,18 @@ private struct PatchModuleToggle: View {
     }
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 3) {
+        VStack(spacing: 3) {
             Text(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
                 .font(.system(size: 8, weight: .black, design: .monospaced))
-                .foregroundStyle(isActive ? Color.green.opacity(0.95) : Color.secondary)
+                .foregroundStyle(isActive ? Color.green : Color.white.opacity(0.62))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(isActive ? Color.green.opacity(0.15) : Color.white.opacity(0.08), in: Capsule())
                 .lineLimit(1)
 
-            Text(language.text(isActive ? "patch.module_stop" : "patch.module_start"))
-                .font(.system(size: 7, weight: .black, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.88))
+            Text(isActive ? "STOP MODULE" : "START MODULE")
+                .font(.system(size: 7, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white.opacity(isActive ? 0.88 : 0.82))
                 .lineLimit(1)
 
             Button {

@@ -49,7 +49,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if licenseSession.isAuthorized {
+            if showsInstalledContent {
                 Group {
                     if horizontalSizeClass == .regular {
                         regularLayout
@@ -68,6 +68,9 @@ struct ContentView: View {
         .imageScale(.small)
         .preferredColorScheme(.dark)
         .task(id: scenePhase) {
+#if targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return }
+#endif
             await licenseSession.runForegroundSession(for: scenePhase)
         }
         .onChange(of: patchDraftCoordinator.request?.id) { requestID in
@@ -111,6 +114,13 @@ struct ContentView: View {
         .repositoryStorePresentation(repositoryStore, patchStore: patchStore)
     }
 
+    private var showsInstalledContent: Bool {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return true }
+#endif
+        return licenseSession.isAuthorized
+    }
+
     private var compactLayout: some View {
         sectionContent(selectedVisibleSection)
     }
@@ -135,7 +145,7 @@ struct ContentView: View {
                 onOpenLogs: openLogs
             )
         case .installed:
-            PatchProjectsView(onOpenSettings: openSettings)
+            PatchProjectsView(onOpenSettings: openSettings, onOpenLogs: openLogs)
         case .files:
             AppDataBrowserView(
                 tabSession: filesTabSession,

@@ -18,6 +18,11 @@ struct ThreeOneOSSixApp: App {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init() {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") {
+            _showOnboarding = State(initialValue: false)
+        }
+#endif
         setupLogCapture()
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         let appBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
@@ -63,6 +68,9 @@ struct ThreeOneOSSixApp: App {
     }
 
     private func checkForUpdate() {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return }
+#endif
         Task {
             guard let offer = await AppUpdateChecker.check() else { return }
             await MainActor.run { updateOffer = offer }
@@ -72,6 +80,9 @@ struct ThreeOneOSSixApp: App {
     /// Foreground-switch variant: 30-minute throttle lives in the checker
     /// (persisted), so repeated quick app switches cost nothing.
     private func checkForUpdateThrottled() {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return }
+#endif
         Task {
             guard let offer = await AppUpdateChecker.throttledForegroundCheck() else { return }
             await MainActor.run { updateOffer = offer }
