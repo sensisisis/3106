@@ -7,6 +7,7 @@ struct PatchLibraryItem: Identifiable {
     var packageURL: URL
     let isAuthorCopy: Bool
     let origin: PatchPackageOrigin?
+    var isBundled = false
 
     var id: UUID { summary.packageID }
     var isLocked: Bool { project == nil }
@@ -18,7 +19,7 @@ struct PatchLibraryItem: Identifiable {
         )
     }
     var workspaceURL: URL? {
-        guard canInspectContents else { return nil }
+        guard canInspectContents, !isBundled else { return nil }
         return PatchWorkspaceService.workspaceURL(projectID: id)
     }
 }
@@ -78,19 +79,46 @@ enum PatchProjectLibrary {
     }
 
     static func load(fileManager: FileManager = .default) -> [PatchLibraryItem] {
-        seedBundledPackages(fileManager: fileManager)
+        let bundledItems = loadBundledPackages(bundle: .main, fileManager: fileManager)
+        let bundledIDs = Set(bundledItems.map(\.id))
+        var byID: [UUID: PatchLibraryItem] = [:]
+        for item in bundledItems {
+            byID[item.id] = item
+        }
+
+        // Remove the package copies and editable Documents/Patches workspaces
+        // created by older builds. The bundle is now the sole source of truth.
+        for item in bundledItems {
+            try? PatchWorkspaceService.deleteWorkspace(
+                projectID: item.id,
+                fileManager: fileManager
+            )
+        }
+
         guard let root = try? packageRootURL(fileManager: fileManager),
               let urls = try? fileManager.contentsOfDirectory(
                 at: root,
                 includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
                 options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-              ) else { return [] }
-
-        var byID: [UUID: PatchLibraryItem] = [:]
+              ) else {
+            return byID.values.sorted {
+                ($0.project?.updatedAt ?? .distantPast) > ($1.project?.updatedAt ?? .distantPast)
+            }
+        }
         for url in urls where packageExtensions.contains(url.pathExtension.lowercased()) {
             do {
                 let data = try readPackage(at: url)
                 let summary = try PatchPackageCodec.inspect(data)
+                if bundledIDs.contains(summary.packageID) {
+                    // This is a copy seeded by an older build. Remove it so
+                    // only the bundle-backed, read-only item remains visible.
+                    do {
+                        try fileManager.removeItem(at: url)
+                    } catch {
+                        log("patch: could not remove old bundled copy \(url.lastPathComponent)")
+                    }
+                    continue
+                }
                 let decoded: DecodedPatchPackage?
                 if let contentKey = try PatchKeyStore.load(for: summary) {
                     decoded = try PatchPackageCodec.decode(data, contentKey: contentKey)
@@ -112,9 +140,10 @@ enum PatchProjectLibrary {
                     origin: loadOrigin(
                         packageID: summary.packageID,
                         fileManager: fileManager
-                    )
+                    ),
+                    isBundled: false
                 )
-                if summary.schemaVersion >= 2, let project = decoded?.project {
+                if !item.isBundled, summary.schemaVersion >= 2, let project = decoded?.project {
                     if PatchProjectAccessPolicy.shouldMaterializeWorkspace(
                         project: project,
                         isAuthorCopy: isAuthorCopy
@@ -141,34 +170,20 @@ enum PatchProjectLibrary {
         }
     }
 
-    /// Copies bundled patch packages into the user's library before the first
-    /// load. Bundled data is never decoded, rewritten, unlocked, activated, or
-    /// marked as an author copy here; the normal loader retains those semantics.
-    /// A package already present in Application Support wins by package UUID,
-    /// including a user package with a different filename or extension.
-    static func seedBundledPackages(
-        bundle: Bundle = .main,
-        fileManager: FileManager = .default
-    ) {
+    private static func loadBundledPackages(
+        bundle: Bundle,
+        fileManager: FileManager
+    ) -> [PatchLibraryItem] {
+        guard let bundledRoot = bundle.url(
+            forResource: bundledPatchesDirectoryName,
+            withExtension: nil
+        ) else {
+            log("patch: bundled package resource unavailable")
+            return []
+        }
+
         do {
-            guard let bundledRoot = bundle.url(
-                forResource: bundledPatchesDirectoryName,
-                withExtension: nil
-            ) else {
-                log("patch: bundled package resource unavailable")
-                return
-            }
-
-            let bundledValues = try bundledRoot.resourceValues(
-                forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
-            )
-            guard bundledValues.isDirectory == true,
-                  bundledValues.isSymbolicLink != true else {
-                throw PatchPackageError.symbolicLinkUnsupported
-            }
-
-            let root = try packageRootURL(fileManager: fileManager)
-            let rootValues = try root.resourceValues(
+            let rootValues = try bundledRoot.resourceValues(
                 forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
             )
             guard rootValues.isDirectory == true,
@@ -176,11 +191,7 @@ enum PatchProjectLibrary {
                 throw PatchPackageError.symbolicLinkUnsupported
             }
 
-            var knownPackageIDs = try existingPackageIDs(
-                in: root,
-                fileManager: fileManager
-            )
-            let bundledURLs = try fileManager.contentsOfDirectory(
+            let urls = try fileManager.contentsOfDirectory(
                 at: bundledRoot,
                 includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
                 options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
@@ -188,131 +199,36 @@ enum PatchProjectLibrary {
             .filter { packageExtensions.contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-            for bundledURL in bundledURLs {
+            return urls.compactMap { url in
                 do {
-                    let sourceValues = try bundledURL.resourceValues(
-                        forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
-                    )
-                    guard sourceValues.isRegularFile == true,
-                          sourceValues.isSymbolicLink != true else {
-                        throw PatchPackageError.symbolicLinkUnsupported
-                    }
-
-                    // Inspect only the public envelope. This keeps encrypted
-                    // packages encrypted and lets the regular loader request
-                    // a password later when the user chooses to unlock one.
-                    let data = try readPackage(at: bundledURL)
+                    let data = try readPackage(at: url)
                     let summary = try PatchPackageCodec.inspect(data)
-                    guard !knownPackageIDs.contains(summary.packageID) else {
-                        continue
+                    let decoded: DecodedPatchPackage?
+                    if let contentKey = try PatchKeyStore.load(for: summary) {
+                        decoded = try PatchPackageCodec.decode(data, contentKey: contentKey)
+                    } else if summary.isPasswordProtected {
+                        decoded = nil
+                    } else {
+                        decoded = try PatchPackageCodec.decode(data, password: nil)
                     }
-
-                    let destination = try nextSeedDestination(
-                        for: bundledURL,
-                        in: root,
-                        fileManager: fileManager
+                    return PatchLibraryItem(
+                        summary: summary,
+                        project: decoded?.project,
+                        contentKey: decoded?.contentKey,
+                        packageURL: url,
+                        isAuthorCopy: false,
+                        origin: nil,
+                        isBundled: true
                     )
-                    try copyBundledPackage(
-                        from: bundledURL,
-                        to: destination,
-                        fileManager: fileManager
-                    )
-                    knownPackageIDs.insert(summary.packageID)
                 } catch {
-                    log("patch: bundled package skipped \(bundledURL.lastPathComponent): \(error)")
+                    log("patch: skipped invalid bundled package \(url.lastPathComponent)")
+                    return nil
                 }
             }
         } catch {
-            // Seeding is best effort and must not block the patch list. A
-            // failed or unsafe seed never reports a false import success.
-            log("patch: bundled package seeding failed closed: \(error)")
+            log("patch: bundled package loading failed closed: \(error)")
+            return []
         }
-    }
-
-    private static func existingPackageIDs(
-        in root: URL,
-        fileManager: FileManager
-    ) throws -> Set<UUID> {
-        let urls = try fileManager.contentsOfDirectory(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
-            options: [.skipsSubdirectoryDescendants]
-        )
-        var packageIDs = Set<UUID>()
-        for url in urls where packageExtensions.contains(url.pathExtension.lowercased()) {
-            do {
-                let values = try url.resourceValues(
-                    forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
-                )
-                guard values.isRegularFile == true,
-                      values.isSymbolicLink != true else {
-                    log("patch: existing package ignored because it is not a regular file \(url.lastPathComponent)")
-                    continue
-                }
-                let summary = try PatchPackageCodec.inspect(readPackage(at: url))
-                packageIDs.insert(summary.packageID)
-            } catch {
-                // Keep malformed user files untouched; they must never be
-                // overwritten merely because a bundled filename collides.
-                log("patch: existing package not indexed \(url.lastPathComponent): \(error)")
-            }
-        }
-        return packageIDs
-    }
-
-    private static func nextSeedDestination(
-        for sourceURL: URL,
-        in root: URL,
-        fileManager: FileManager
-    ) throws -> URL {
-        let sourceName = sourceURL.deletingPathExtension().lastPathComponent
-        let sourceExtension = sourceURL.pathExtension
-        guard !sourceName.isEmpty, !sourceExtension.isEmpty else {
-            throw PatchPackageError.invalidProject
-        }
-
-        for suffix in 0..<10_000 {
-            let filename = suffix == 0
-                ? sourceURL.lastPathComponent
-                : "\(sourceName)-\(suffix + 1).\(sourceExtension)"
-            let candidate = root.appendingPathComponent(filename, isDirectory: false)
-            let values = try? candidate.resourceValues(
-                forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]
-            )
-            let pathIsOccupied = fileManager.fileExists(atPath: candidate.path)
-                || values?.isDirectory == true
-                || values?.isRegularFile == true
-                || values?.isSymbolicLink == true
-            if !pathIsOccupied {
-                return candidate
-            }
-        }
-        throw PatchPackageError.invalidProject
-    }
-
-    private static func copyBundledPackage(
-        from sourceURL: URL,
-        to destinationURL: URL,
-        fileManager: FileManager
-    ) throws {
-        let stagingURL = destinationURL.deletingLastPathComponent()
-            .appendingPathComponent(".bundled-patch-\(UUID().uuidString).tmp")
-        defer {
-            try? fileManager.removeItem(at: stagingURL)
-        }
-
-        try fileManager.copyItem(at: sourceURL, to: stagingURL)
-        let stagedValues = try stagingURL.resourceValues(
-            forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
-        )
-        guard stagedValues.isRegularFile == true,
-              stagedValues.isSymbolicLink != true else {
-            throw PatchPackageError.symbolicLinkUnsupported
-        }
-
-        // The destination is deliberately not replaced. If another loader
-        // wins the race, moveItem fails and the staged copy is removed.
-        try fileManager.moveItem(at: stagingURL, to: destinationURL)
     }
 
     static func readPackage(at url: URL) throws -> Data {
@@ -490,6 +406,7 @@ enum PatchProjectLibrary {
     }
 
     static func delete(_ item: PatchLibraryItem, fileManager: FileManager = .default) throws {
+        guard !item.isBundled else { throw PatchPackageError.invalidProject }
         guard !hasActivePatchTransactions(
             projectID: item.id,
             fileManager: fileManager
@@ -519,7 +436,8 @@ enum PatchProjectLibrary {
         item: PatchLibraryItem,
         fileManager: FileManager = .default
     ) throws -> PatchProject {
-        guard item.summary.schemaVersion >= 2,
+        guard !item.isBundled,
+              item.summary.schemaVersion >= 2,
               item.canInspectContents,
               let baseProject = item.project,
               let contentKey = item.contentKey else {

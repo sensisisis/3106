@@ -82,6 +82,7 @@ final class PatchProjectStore: ObservableObject {
 
     func update(project: PatchProject) {
         guard let item = items.first(where: { $0.id == project.id }),
+              !item.isBundled,
               let contentKey = item.contentKey else {
             present(.invalidProject)
             return
@@ -283,6 +284,7 @@ final class PatchProjectStore: ObservableObject {
     }
 
     func delete(_ item: PatchLibraryItem) {
+        guard !item.isBundled else { return }
         do {
             try PatchProjectLibrary.delete(item)
             reload()
@@ -295,6 +297,7 @@ final class PatchProjectStore: ObservableObject {
 
     func synchronizeWorkspace(projectID: UUID, reportsSuccess: Bool = false) {
         guard let item = items.first(where: { $0.id == projectID }),
+              !item.isBundled,
               item.summary.schemaVersion >= 2,
               !isBusy else { return }
         isBusy = true

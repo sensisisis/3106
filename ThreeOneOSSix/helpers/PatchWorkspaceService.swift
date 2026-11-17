@@ -323,7 +323,16 @@ enum PatchWorkspaceService {
         projectID: UUID,
         fileManager: FileManager = .default
     ) throws {
-        guard let workspace = workspaceURL(projectID: projectID, fileManager: fileManager) else {
+        let documents = try documentsRootURL(fileManager: fileManager)
+        let root = documents.appendingPathComponent("Patches", isDirectory: true)
+        guard let rootValues = try? root.resourceValues(
+            forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+        ), rootValues.isDirectory == true, rootValues.isSymbolicLink != true,
+              let workspace = workspaceURL(
+                projectID: projectID,
+                patchesRoot: root,
+                fileManager: fileManager
+              ) else {
             return
         }
         try fileManager.removeItem(at: workspace)

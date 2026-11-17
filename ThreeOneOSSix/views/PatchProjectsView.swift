@@ -819,13 +819,15 @@ struct PatchProjectsView: View {
 
     @ViewBuilder
     private func deleteMenu(_ item: PatchLibraryItem) -> some View {
-        Button(role: .destructive) {
-            guard !isModuleOperationInProgress else { return }
-            store.delete(item)
-        } label: {
-            Label(language.text("common.delete"), systemImage: "trash")
+        if !item.isBundled {
+            Button(role: .destructive) {
+                guard !isModuleOperationInProgress else { return }
+                store.delete(item)
+            } label: {
+                Label(language.text("common.delete"), systemImage: "trash")
+            }
+            .disabled(isModuleOperationInProgress)
         }
-        .disabled(isModuleOperationInProgress)
     }
 
     private var emptyState: some View {
@@ -1067,7 +1069,8 @@ private struct PatchModuleToggle: View {
 
     private func applyRule() {
         isWorking = true
-        let shouldSynchronizeWorkspace = item.summary.schemaVersion >= 2
+        let shouldSynchronizeWorkspace = !item.isBundled
+            && item.summary.schemaVersion >= 2
             && item.canInspectContents
             && !DevicePatchService.hasActiveTransactions(projectID: project.id)
         Task.detached(priority: .userInitiated) {
@@ -1393,7 +1396,7 @@ private struct PatchProjectDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)
                     }
-                } else if isWorkspaceProject {
+                } else if isWorkspaceProject && !item.isBundled {
                     Section {
                         ForEach(project.allBundleIdentifiers, id: \.self) { bundleID in
                             Label {
@@ -1488,11 +1491,13 @@ private struct PatchProjectDetailView: View {
                     }
                 }
 
-                Section {
-                    Button(action: prepareExport) {
-                        actionLabel("patch.export", systemImage: "square.and.arrow.up")
+                if !item.isBundled {
+                    Section {
+                        Button(action: prepareExport) {
+                            actionLabel("patch.export", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(isWorking || hasActiveModules)
                     }
-                    .disabled(isWorking || hasActiveModules)
                 }
             }
         }
@@ -1503,7 +1508,9 @@ private struct PatchProjectDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if isWorking {
                     ProgressView()
-                } else if !isWorkspaceProject, item?.canInspectContents == true {
+                } else if !isWorkspaceProject,
+                          item?.canInspectContents == true,
+                          item?.isBundled != true {
                     Button(language.text("patch.edit")) { showEditor = true }
                         .disabled(item?.project == nil || hasActiveModules)
                 }
@@ -1675,7 +1682,7 @@ private struct PatchProjectDetailView: View {
     }
 
     private func prepareExport() {
-        guard let item else { return }
+        guard let item, !item.isBundled else { return }
         isWorking = true
         Task.detached(priority: .userInitiated) {
             do {
