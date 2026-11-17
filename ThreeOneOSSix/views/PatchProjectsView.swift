@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
-import ImageIO
 
 private enum PatchPackagePickerPolicy {
     // Export uses the new .3106 extension; .3105 stays importable so existing
@@ -16,70 +15,6 @@ private enum PatchPackagePickerPolicy {
 private enum WallpaperPackagePickerPolicy {
     static let packageType = UTType(filenameExtension: "tendies") ?? .data
     static let allowedContentTypes: [UTType] = [packageType, .data]
-}
-
-private enum FaxAuraGIFAsset {
-    private static let decoded: (frames: [UIImage], duration: TimeInterval) = {
-        guard let url = Bundle.main.url(forResource: "FaxAuraActivity", withExtension: "gif"),
-              let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
-            return ([], 0)
-        }
-        let frameCount = CGImageSourceGetCount(source)
-        guard frameCount > 0 else { return ([], 0) }
-
-        var frames: [UIImage] = []
-        var duration: TimeInterval = 0
-        for index in 0..<frameCount {
-            guard let cgImage = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
-            frames.append(UIImage(cgImage: cgImage))
-
-            let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any]
-            let gifProperties = properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
-            let unclampedDelay = (gifProperties?[kCGImagePropertyGIFUnclampedDelayTime] as? NSNumber)?.doubleValue
-            let clampedDelay = (gifProperties?[kCGImagePropertyGIFDelayTime] as? NSNumber)?.doubleValue
-            duration += max(unclampedDelay ?? clampedDelay ?? 0.12, 0.04)
-        }
-        return (frames, duration)
-    }()
-
-    static let still: UIImage? = decoded.frames.first
-    static let animated: UIImage? = {
-        guard decoded.frames.count > 1 else { return still }
-        return UIImage.animatedImage(with: decoded.frames, duration: decoded.duration)
-    }()
-}
-
-private struct FaxAuraAnimatedImage: UIViewRepresentable {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeUIView(context: Context) -> UIImageView {
-        let imageView = UIImageView()
-        imageView.contentMode = .scaleAspectFill
-        imageView.clipsToBounds = true
-        updateImage(in: imageView)
-        return imageView
-    }
-
-    func updateUIView(_ imageView: UIImageView, context: Context) {
-        updateImage(in: imageView)
-    }
-
-    private func updateImage(in imageView: UIImageView) {
-        let fallback = UIImage(named: "ActivityHeaderArt")
-        let image = reduceMotion
-            ? (FaxAuraGIFAsset.still ?? fallback)
-            : (FaxAuraGIFAsset.animated ?? FaxAuraGIFAsset.still ?? fallback)
-        if imageView.image !== image {
-            imageView.image = image
-        }
-
-        if !reduceMotion, let frames = imageView.image?.images, frames.count > 1 {
-            imageView.animationRepeatCount = 0
-            if !imageView.isAnimating { imageView.startAnimating() }
-        } else {
-            imageView.stopAnimating()
-        }
-    }
 }
 
 struct PatchProjectsView: View {
@@ -167,28 +102,27 @@ struct PatchProjectsView: View {
 
     private var activityCard: some View {
         Button(action: onOpenLogs) {
-            HStack(spacing: 12) {
-                faxAuraActivityVisual
-                VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 9) {
+                activityLogIcon
+                VStack(alignment: .leading, spacing: 2) {
                     Text(language.text("installed.activity"))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.white)
-                    Text(language.text("installed.ready_status"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.92))
-                        .lineLimit(1)
                     Text(appLog.entries.last ?? language.text("installed.no_recent_activity"))
-                        .font(.system(size: 10))
+                        .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 Spacer(minLength: 4)
                 Circle()
                     .fill(isModuleOperationInProgress ? Color.orange : Color.white)
-                    .frame(width: 9, height: 9)
+                    .frame(width: 7, height: 7)
                     .shadow(color: .white.opacity(0.75), radius: 6)
+                    .accessibilityHidden(true)
             }
-            .padding(12)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 LinearGradient(
@@ -210,18 +144,15 @@ struct PatchProjectsView: View {
         }
     }
 
-    private var faxAuraActivityVisual: some View {
+    private var activityLogIcon: some View {
         ZStack {
-            FaxAuraAnimatedImage()
-                .frame(width: 88, height: 58)
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            Circle()
+                .fill(Color.white.opacity(0.08))
+            Image(systemName: "waveform.path")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
                 .accessibilityHidden(true)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(.white.opacity(0.20), lineWidth: 0.7)
-                }
-
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            Circle()
                 .stroke(
                     AngularGradient(
                         gradient: Gradient(colors: [
@@ -235,15 +166,16 @@ struct PatchProjectsView: View {
                         startAngle: .degrees(activityOrbitDegrees),
                         endAngle: .degrees(activityOrbitDegrees + 360)
                     ),
-                    lineWidth: 1.6
+                    lineWidth: 1.3
                 )
                 .shadow(color: .white.opacity(0.48), radius: 4)
+                .frame(width: 36, height: 36)
                 .animation(
                     reduceMotion ? nil : .linear(duration: 2.4).repeatForever(autoreverses: false),
                     value: activityOrbitDegrees
                 )
         }
-        .frame(width: 94, height: 64)
+        .frame(width: 36, height: 36)
     }
 
     private var moduleStatusPanel: some View {
@@ -677,15 +609,19 @@ struct PatchProjectsView: View {
                         }
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(rule.replacementFilename.isEmpty ? project.name : rule.replacementFilename)
+                        Text(project.name)
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.78)
-                        Text(project.name)
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        if !rule.replacementFilename.isEmpty,
+                           rule.replacementFilename != project.name {
+                            Text(rule.replacementFilename)
+                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                         Text(rule.relativePath)
                             .font(.system(size: 8, design: .monospaced))
                             .foregroundStyle(.secondary.opacity(0.85))
