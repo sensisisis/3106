@@ -33,6 +33,7 @@ final class PatchProjectStore: ObservableObject {
         let summary: PatchPackageSummary
         let existingURL: URL?
         let origin: PatchPackageOrigin?
+        let isBundled: Bool
     }
 
     private var pendingUnlock: PendingUnlock?
@@ -226,12 +227,18 @@ final class PatchProjectStore: ObservableObject {
     func requestUnlock(for item: PatchLibraryItem) {
         guard item.isLocked, !isBusy else { return }
         do {
-            let data = try PatchProjectLibrary.readPackage(at: item.packageURL)
+            let data: Data
+            if let embeddedData = item.embeddedPackageData {
+                data = embeddedData
+            } else {
+                data = try PatchProjectLibrary.readPackage(at: item.packageURL)
+            }
             pendingUnlock = PendingUnlock(
                 data: data,
                 summary: item.summary,
-                existingURL: item.packageURL,
-                origin: item.origin
+                existingURL: item.isBundled ? nil : item.packageURL,
+                origin: item.origin,
+                isBundled: item.isBundled
             )
             passwordRequest = PatchPasswordRequest(
                 summary: item.summary,
@@ -260,6 +267,11 @@ final class PatchProjectStore: ObservableObject {
                         existingURL: pending.existingURL,
                         origin: pending.origin
                     )
+                    if pending.isBundled {
+                        try PatchProjectLibrary.markAsAuthorCopy(
+                            packageID: pending.summary.packageID
+                        )
+                    }
                 } catch {
                     try? PatchKeyStore.delete(for: pending.summary)
                     throw error
@@ -379,7 +391,8 @@ final class PatchProjectStore: ObservableObject {
                     data: data,
                     summary: summary,
                     existingURL: existingURL,
-                    origin: origin
+                    origin: origin,
+                    isBundled: false
                 )
             }
             let decoded = try PatchPackageCodec.decode(data, password: password)

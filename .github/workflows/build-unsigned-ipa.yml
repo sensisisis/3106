@@ -24,6 +24,9 @@ jobs:
       - name: Policy tests
         run: bash Tests/run_policy_tests.sh
 
+      - name: Verify embedded patch data
+        run: python3 Tests/verify_embedded_patch_data.py
+
       - name: Build
         run: |
           xcodebuild -project ThreeOneOSSix.xcodeproj -scheme 3106 \
@@ -31,6 +34,19 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build
+
+      - name: Verify patch data is compiled into the executable
+        run: |
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/3106.app"
+          if [[ -e "$APP/BundledPatches" ]]; then
+            echo "FAIL: BundledPatches must not be a visible app-bundle folder" >&2
+            exit 1
+          fi
+          if find "$APP" -type f -name '*.3105' -print -quit | grep -q .; then
+            echo "FAIL: standalone .3105 files remain in the app bundle" >&2
+            exit 1
+          fi
+          echo "embedded patch data has no loose app-bundle files"
 
       - name: Package unsigned IPA
         run: |

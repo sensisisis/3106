@@ -8,6 +8,7 @@ struct PatchLibraryItem: Identifiable {
     let isAuthorCopy: Bool
     let origin: PatchPackageOrigin?
     var isBundled = false
+    var embeddedPackageData: Data? = nil
 
     var id: UUID { summary.packageID }
     var isLocked: Bool { project == nil }
@@ -38,7 +39,6 @@ struct PatchPasswordRequest: Identifiable {
 enum PatchProjectLibrary {
     private static let authorCopiesDirectoryName = ".AuthorCopies"
     private static let originsDirectoryName = ".Origins"
-    private static let bundledPatchesDirectoryName = "BundledPatches"
     private static let packageExtensions: Set<String> = ["3106", "3105"]
 
     static func packageRootURL(fileManager: FileManager = .default) throws -> URL {
@@ -79,7 +79,7 @@ enum PatchProjectLibrary {
     }
 
     static func load(fileManager: FileManager = .default) -> [PatchLibraryItem] {
-        let bundledItems = loadBundledPackages(bundle: .main, fileManager: fileManager)
+        let bundledItems = loadBundledPackages()
         let bundledIDs = Set(bundledItems.map(\.id))
         var byID: [UUID: PatchLibraryItem] = [:]
         for item in bundledItems {
@@ -109,9 +109,13 @@ enum PatchProjectLibrary {
             do {
                 let data = try readPackage(at: url)
                 let summary = try PatchPackageCodec.inspect(data)
-                if bundledIDs.contains(summary.packageID) {
-                    // This is a copy seeded by an older build. Remove it so
-                    // only the bundle-backed, read-only item remains visible.
+                let localAuthorCopy = isAuthorCopy(
+                    packageID: summary.packageID,
+                    fileManager: fileManager
+                )
+                if bundledIDs.contains(summary.packageID), !localAuthorCopy {
+                    // Remove legacy seed copies; an explicitly unlocked author
+                    // copy is preserved and may override the embedded default.
                     do {
                         try fileManager.removeItem(at: url)
                     } catch {
@@ -127,16 +131,12 @@ enum PatchProjectLibrary {
                 } else {
                     decoded = try PatchPackageCodec.decode(data, password: nil)
                 }
-                let isAuthorCopy = isAuthorCopy(
-                    packageID: summary.packageID,
-                    fileManager: fileManager
-                )
                 let item = PatchLibraryItem(
                     summary: summary,
                     project: decoded?.project,
                     contentKey: decoded?.contentKey,
                     packageURL: url,
-                    isAuthorCopy: isAuthorCopy,
+                    isAuthorCopy: localAuthorCopy,
                     origin: loadOrigin(
                         packageID: summary.packageID,
                         fileManager: fileManager
@@ -146,7 +146,7 @@ enum PatchProjectLibrary {
                 if !item.isBundled, summary.schemaVersion >= 2, let project = decoded?.project {
                     if PatchProjectAccessPolicy.shouldMaterializeWorkspace(
                         project: project,
-                        isAuthorCopy: isAuthorCopy
+                        isAuthorCopy: localAuthorCopy
                     ) {
                         do {
                             _ = try PatchWorkspaceService.ensureWorkspace(for: project)
@@ -170,64 +170,39 @@ enum PatchProjectLibrary {
         }
     }
 
-    private static func loadBundledPackages(
-        bundle: Bundle,
-        fileManager: FileManager
-    ) -> [PatchLibraryItem] {
-        guard let bundledRoot = bundle.url(
-            forResource: bundledPatchesDirectoryName,
-            withExtension: nil
-        ) else {
-            log("patch: bundled package resource unavailable")
-            return []
-        }
-
-        do {
-            let rootValues = try bundledRoot.resourceValues(
-                forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
-            )
-            guard rootValues.isDirectory == true,
-                  rootValues.isSymbolicLink != true else {
-                throw PatchPackageError.symbolicLinkUnsupported
+    private static func loadBundledPackages() -> [PatchLibraryItem] {
+        BundledPatchData.packages.compactMap { entry in
+            guard let data = entry.data else {
+                log("patch: invalid embedded package data \(entry.label)")
+                return nil
             }
-
-            let urls = try fileManager.contentsOfDirectory(
-                at: bundledRoot,
-                includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
-                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-            )
-            .filter { packageExtensions.contains($0.pathExtension.lowercased()) }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-
-            return urls.compactMap { url in
-                do {
-                    let data = try readPackage(at: url)
-                    let summary = try PatchPackageCodec.inspect(data)
-                    let decoded: DecodedPatchPackage?
-                    if let contentKey = try PatchKeyStore.load(for: summary) {
-                        decoded = try PatchPackageCodec.decode(data, contentKey: contentKey)
-                    } else if summary.isPasswordProtected {
-                        decoded = nil
-                    } else {
-                        decoded = try PatchPackageCodec.decode(data, password: nil)
-                    }
-                    return PatchLibraryItem(
-                        summary: summary,
-                        project: decoded?.project,
-                        contentKey: decoded?.contentKey,
-                        packageURL: url,
-                        isAuthorCopy: false,
-                        origin: nil,
-                        isBundled: true
-                    )
-                } catch {
-                    log("patch: skipped invalid bundled package \(url.lastPathComponent)")
-                    return nil
+            do {
+                let summary = try PatchPackageCodec.inspect(data)
+                let decoded: DecodedPatchPackage?
+                if let contentKey = try PatchKeyStore.load(for: summary) {
+                    decoded = try PatchPackageCodec.decode(data, contentKey: contentKey)
+                } else if summary.isPasswordProtected {
+                    decoded = nil
+                } else {
+                    decoded = try PatchPackageCodec.decode(data, password: nil)
                 }
+                let embeddedURL = URL(
+                    string: "embedded3106://\(summary.packageID.uuidString)"
+                )!
+                return PatchLibraryItem(
+                    summary: summary,
+                    project: decoded?.project,
+                    contentKey: decoded?.contentKey,
+                    packageURL: embeddedURL,
+                    isAuthorCopy: false,
+                    origin: nil,
+                    isBundled: true,
+                    embeddedPackageData: data
+                )
+            } catch {
+                log("patch: skipped invalid embedded package \(entry.label)")
+                return nil
             }
-        } catch {
-            log("patch: bundled package loading failed closed: \(error)")
-            return []
         }
     }
 
