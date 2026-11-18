@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -7,6 +8,9 @@ struct SettingsView: View {
 
     @ObservedObject var session: LicenseSession
     @AppStorage("faxAura.ledLightingEnabled") private var ledLightingEnabled = false
+    @AppStorage("faxAura.ledColorRed") private var ledColorRed = 0.0
+    @AppStorage("faxAura.ledColorGreen") private var ledColorGreen = 0.78
+    @AppStorage("faxAura.ledColorBlue") private var ledColorBlue = 1.0
     @State private var showsActivation = false
 
     init(session: LicenseSession) {
@@ -88,7 +92,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 11) {
                         Text("AURA RGB DARK")
                             .font(.system(size: 16, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.62))
+                            .foregroundStyle(ledLightingEnabled ? selectedLEDColor : .white.opacity(0.62))
                             .padding(.horizontal, 4)
 
                         Toggle(isOn: $ledLightingEnabled) {
@@ -96,12 +100,53 @@ struct SettingsView: View {
                                 .font(.system(size: 17, weight: .regular, design: .rounded))
                                 .foregroundStyle(.white)
                         }
-                        .tint(.white)
+                        .tint(selectedLEDColor)
                         .padding(.horizontal, 18)
                         .frame(minHeight: 62)
                         .settingsGraphiteCard()
 
-                        Text("Adds a customizable LED accent to the Fax Aura console.\nText remains white for readability.")
+                        if ledLightingEnabled {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("External LED color")
+                                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                                        .foregroundStyle(.white)
+                                    Text("Choose the outer glow color")
+                                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                                        .foregroundStyle(.white.opacity(0.55))
+                                }
+
+                                Spacer(minLength: 8)
+
+                                ColorPicker(
+                                    "External LED color",
+                                    selection: selectedLEDColorBinding,
+                                    supportsOpacity: false
+                                )
+                                .labelsHidden()
+                                .accessibilityLabel("External LED color")
+                            }
+                            .padding(.horizontal, 18)
+                            .frame(minHeight: 62)
+                            .settingsGraphiteCard(cornerRadius: 20)
+
+                            HStack(spacing: 10) {
+                                Text("LIVE PREVIEW")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .tracking(1.1)
+                                    .foregroundStyle(.white.opacity(0.55))
+                                Spacer(minLength: 8)
+                                Capsule()
+                                    .fill(selectedLEDColor)
+                                    .frame(width: 88, height: 5)
+                                    .shadow(color: selectedLEDColor.opacity(0.75), radius: 7)
+                            }
+                            .padding(.horizontal, 18)
+                            .frame(minHeight: 48)
+                            .settingsGraphiteCard(cornerRadius: 18)
+                        }
+
+                        Text("Turn on the outer LED glow and choose its color below. Text stays white for readability.")
                             .font(.system(size: 14, weight: .regular, design: .rounded))
                             .foregroundStyle(.white.opacity(0.55))
                             .fixedSize(horizontal: false, vertical: true)
@@ -129,6 +174,29 @@ struct SettingsView: View {
                 }
             )
         }
+    }
+
+    private var selectedLEDColor: Color {
+        Color(red: ledColorRed, green: ledColorGreen, blue: ledColorBlue)
+    }
+
+    private var selectedLEDColorBinding: Binding<Color> {
+        Binding(
+            get: { selectedLEDColor },
+            set: { updateLEDColor($0) }
+        )
+    }
+
+    private func updateLEDColor(_ color: Color) {
+        let uiColor = UIColor(color)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 1
+        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return }
+        ledColorRed = Double(red)
+        ledColorGreen = Double(green)
+        ledColorBlue = Double(blue)
     }
 
     private var appInfoCard: some View {

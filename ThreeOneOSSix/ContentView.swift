@@ -13,6 +13,9 @@ struct ContentView: View {
     @State private var showLogs = false
     @State private var showAppGroupAlert = false
     @AppStorage("faxAura.ledLightingEnabled") private var ledLightingEnabled = false
+    @AppStorage("faxAura.ledColorRed") private var ledColorRed = 0.0
+    @AppStorage("faxAura.ledColorGreen") private var ledColorGreen = 0.78
+    @AppStorage("faxAura.ledColorBlue") private var ledColorBlue = 1.0
     @StateObject private var scanCoordinator = ScanCoordinator()
     @StateObject private var licenseSession = LicenseSession()
 
@@ -109,10 +112,18 @@ struct ContentView: View {
             if ledLightingEnabled && showsInstalledContent {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .stroke(
-                        LinearGradient(colors: [.cyan.opacity(0.55), .purple.opacity(0.45), .pink.opacity(0.50)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        LinearGradient(
+                            colors: [
+                                selectedLEDColor.opacity(0.78),
+                                selectedLEDColor.opacity(0.42),
+                                selectedLEDColor.opacity(0.66)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
                         lineWidth: 1
                     )
-                    .shadow(color: .purple.opacity(0.20), radius: 12)
+                    .shadow(color: selectedLEDColor.opacity(0.24), radius: 12)
                     .padding(5)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -134,6 +145,10 @@ struct ContentView: View {
         if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return true }
 #endif
         return licenseSession.isAuthorized
+    }
+
+    private var selectedLEDColor: Color {
+        Color(red: ledColorRed, green: ledColorGreen, blue: ledColorBlue)
     }
 
     private var compactLayout: some View {
