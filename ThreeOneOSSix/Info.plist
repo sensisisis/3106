@@ -55,13 +55,13 @@
 				<string>threeoneossix</string>
 				<string>threeoneosfive</string>
 			</array>
-		</dict>
+			</dict>
 		</array>
-	<key>CFBundleVersion</key>
-	<string>32</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
+		<key>CFBundleVersion</key>
+		<string>33</string>
+		<key>LSRequiresIPhoneOS</key>
+		<true/>
+		<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>MinimumOSVersion</key>
 	<string>16.0</string>
