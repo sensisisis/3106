@@ -123,6 +123,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showsActivation) {
             LicenseActivationView(
                 sessionNotice: session.notice,
+                isRestoring: false,
                 onActivate: { key in
                     await activate(key)
                 }
