@@ -15,6 +15,32 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: 70, height: 38)
+                    Spacer(minLength: 0)
+                    Text(language.text("settings.title"))
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text(language.text("common.done"))
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .frame(height: 38)
+                            .background(Color.white.opacity(0.14), in: Capsule())
+                            .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 70, alignment: .trailing)
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 52)
+
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 26) {
                     appInfoCard
@@ -88,9 +114,9 @@ struct SettingsView: View {
             }
             .scrollIndicators(.hidden)
             .background(SettingsPalette.background.ignoresSafeArea())
-            .navigationTitle(language.text("settings.title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(content: { settingsToolbar })
+            }
+            .background(SettingsPalette.background.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
         }
         .tint(.white)
         .preferredColorScheme(.dark)
@@ -101,24 +127,6 @@ struct SettingsView: View {
                     await activate(key)
                 }
             )
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var settingsToolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button {
-                dismiss()
-            } label: {
-                Text(language.text("common.done"))
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 17)
-                    .frame(height: 38)
-                    .background(Color.white.opacity(0.14), in: Capsule())
-                    .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
-            }
-            .buttonStyle(.plain)
         }
     }
 
