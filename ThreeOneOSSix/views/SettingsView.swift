@@ -90,22 +90,7 @@ struct SettingsView: View {
             .background(SettingsPalette.background.ignoresSafeArea())
             .navigationTitle(language.text("settings.title"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Text(language.text("common.done"))
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 17)
-                            .frame(height: 38)
-                            .background(Color.white.opacity(0.14), in: Capsule())
-                            .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            .toolbar(content: { settingsToolbar })
         }
         .tint(.white)
         .preferredColorScheme(.dark)
@@ -116,6 +101,24 @@ struct SettingsView: View {
                     await activate(key)
                 }
             )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var settingsToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button {
+                dismiss()
+            } label: {
+                Text(language.text("common.done"))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 17)
+                    .frame(height: 38)
+                    .background(Color.white.opacity(0.14), in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
         }
     }
 
