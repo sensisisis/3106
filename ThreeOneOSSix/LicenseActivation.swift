@@ -20,6 +20,7 @@ enum LicenseActivationResult {
 final class LicenseSession: ObservableObject {
     @Published private(set) var isAuthorized = false
     @Published private(set) var notice: String?
+    @Published private(set) var isRestoring = false
 
     var expirationDate: Date? {
         guard let timestamp = UserDefaults.standard.object(forKey: expirationStorage) as? Double,
@@ -40,11 +41,16 @@ final class LicenseSession: ObservableObject {
     private let fallbackDeviceIDStorage = "3106.supabase.license.fallback-device-id"
     private let expirationStorage = "3106.supabase.license.expires-at"
     private let supabaseRPCURL = "https://skarpahwcwkqdfxgtvlp.supabase.co/rest/v1/rpc/fax_license_validate"
+    private let supabaseRestoreRPCURL = "https://skarpahwcwkqdfxgtvlp.supabase.co/rest/v1/rpc/fax_license_restore"
     private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrYXJwYWh3Y3drcWRmeGd0dmxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMjc3NTYsImV4cCI6MjEwNzYwMzc1Nn0.PUh5QIs_W61En2PdyML31uzMFG_8NvCAHeRp1qYBzFw"
     private var validationGeneration = 0
     private var explicitActivationInFlight = false
     private var cachedDeviceID: String?
     private var deviceIdentityResolutionFailed = false
+
+    init() {
+        isRestoring = LicenseKeychain.load()?.isEmpty == false
+    }
 
     func runForegroundSession(for phase: ScenePhase) async {
         guard phase == .active else { return }
@@ -84,6 +90,7 @@ final class LicenseSession: ObservableObject {
         }
 
         explicitActivationInFlight = true
+        isRestoring = false
         notice = nil
         let generation = beginValidation()
         defer { explicitActivationInFlight = false }
@@ -102,21 +109,34 @@ final class LicenseSession: ObservableObject {
     private func restore() async {
         guard !explicitActivationInFlight else { return }
         let generation = beginValidation()
-        guard let savedKey = storedKey, !savedKey.isEmpty else {
+        let savedKey = storedKey
+        isRestoring = savedKey?.isEmpty == false
+        defer {
+            if generation == validationGeneration {
+                isRestoring = false
+            }
+        }
+        guard let savedKey, !savedKey.isEmpty else {
             guard generation == validationGeneration else { return }
             deauthorize()
             return
         }
 
         let key = normalized(savedKey)
-        guard let sessionVersion = storedSessionVersion(for: key) else {
-            guard generation == validationGeneration, !Task.isCancelled else { return }
-            deauthorize()
-            notice = "license.error.resume"
-            return
+        let outcome: LicenseValidationOutcome
+        if let sessionVersion = storedSessionVersion(for: key) {
+            outcome = await validate(key, sessionVersion: sessionVersion, claim: false)
+        } else {
+            // UserDefaults is cleared when the IPA is removed. Recover only the
+            // server session already bound to this Keychain device ID; this RPC
+            // cannot claim an unbound or administratively released key.
+            outcome = await validate(
+                key,
+                sessionVersion: nil,
+                claim: false,
+                restoreOnly: true
+            )
         }
-
-        let outcome = await validate(key, sessionVersion: sessionVersion, claim: false)
         guard generation == validationGeneration, !Task.isCancelled else { return }
         _ = apply(outcome, key: key)
     }
@@ -166,7 +186,7 @@ final class LicenseSession: ObservableObject {
                     return .failure("license.error.storage")
                 }
                 deauthorize()
-            } else if ["revoked", "invalid", "expired", "session_released", "device_mismatch"].contains(code) {
+            } else if ["not_found", "revoked", "invalid", "expired", "session_released", "device_mismatch"].contains(code) {
                 clearCredentials()
             } else {
                 deauthorize()
@@ -184,7 +204,8 @@ final class LicenseSession: ObservableObject {
     private func validate(
         _ key: String,
         sessionVersion: Int?,
-        claim: Bool
+        claim: Bool,
+        restoreOnly: Bool = false
     ) async -> LicenseValidationOutcome {
         let normalizedKey = normalized(key)
         guard !normalizedKey.isEmpty else {
@@ -195,7 +216,8 @@ final class LicenseSession: ObservableObject {
             .map { String(format: "%02x", $0) }
             .joined()
 
-        guard let url = URL(string: supabaseRPCURL) else {
+        let rpcURL = restoreOnly ? supabaseRestoreRPCURL : supabaseRPCURL
+        guard let url = URL(string: rpcURL) else {
             return .transportFailure("license.error.network")
         }
 
@@ -210,15 +232,26 @@ final class LicenseSession: ObservableObject {
             return .transportFailure("license.error.network")
         }
 
-        let payload: [String: Any] = [
-            "p_key_hash": hash,
-            "p_device_id": stableDeviceID,
-            "p_device_model": deviceModel,
-            "p_device_identifier": machineIdentifier,
-            "p_ios_version": UIDevice.current.systemVersion,
-            "p_session_version": sessionValue,
-            "p_claim": claim
-        ]
+        let payload: [String: Any]
+        if restoreOnly {
+            payload = [
+                "p_key_hash": hash,
+                "p_device_id": stableDeviceID,
+                "p_device_model": deviceModel,
+                "p_device_identifier": machineIdentifier,
+                "p_ios_version": UIDevice.current.systemVersion
+            ]
+        } else {
+            payload = [
+                "p_key_hash": hash,
+                "p_device_id": stableDeviceID,
+                "p_device_model": deviceModel,
+                "p_device_identifier": machineIdentifier,
+                "p_ios_version": UIDevice.current.systemVersion,
+                "p_session_version": sessionValue,
+                "p_claim": claim
+            ]
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -467,7 +500,7 @@ final class LicenseSession: ObservableObject {
         case "paused": return "license.error.paused"
         case "revoked": return "license.error.revoked"
         case "expired": return "license.error.expired"
-        case "invalid": return "license.error.invalid"
+        case "invalid", "not_found": return "license.error.invalid"
         case "device_mismatch": return "license.error.device"
         case "session_released": return "license.error.released"
         case "session_required": return "license.error.resume"
@@ -635,6 +668,7 @@ struct LicenseActivationView: View {
     @State private var isKeyVisible = false
 
     let sessionNotice: String?
+    let isRestoring: Bool
     let onActivate: (String) async -> LicenseActivationResult
 
     private var canActivate: Bool {
@@ -666,7 +700,12 @@ struct LicenseActivationView: View {
             systemHeader
             activityBanner
                 .padding(.top, 14)
-            activationContent
+            if isRestoring {
+                restorationStatus
+                    .padding(.top, 18)
+            } else {
+                activationContent
+            }
             sessionFooter
         }
         .padding(16)
@@ -680,6 +719,34 @@ struct LicenseActivationView: View {
         }
         .shadow(color: .white.opacity(0.16), radius: 24, y: 0)
         .shadow(color: .black.opacity(0.80), radius: 34, y: 18)
+    }
+
+    private var restorationStatus: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(.white)
+                .scaleEffect(1.12)
+            Text("RESTORING SAVED SESSION")
+                .font(.system(size: 11, weight: .black, design: .monospaced))
+                .tracking(1.1)
+                .foregroundStyle(.white.opacity(0.92))
+            Text("Checking your license on this previously linked device.")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.58))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 26)
+        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.white.opacity(0.22), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Restoring saved license on the previously linked device")
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
     private var systemHeader: some View {
@@ -709,7 +776,7 @@ struct LicenseActivationView: View {
                     .fill(.white)
                     .frame(width: 8, height: 8)
                     .shadow(color: .white.opacity(0.75), radius: 5)
-                Text(isLoading ? "SYSTEM VERIFYING" : "SYSTEM READY")
+                Text(isLoading || isRestoring ? "SYSTEM VERIFYING" : "SYSTEM READY")
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
                     .tracking(0.55)
                     .foregroundStyle(.white.opacity(0.78))

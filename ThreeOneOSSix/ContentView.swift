@@ -61,6 +61,7 @@ struct ContentView: View {
             } else {
                 LicenseActivationView(
                     sessionNotice: licenseSession.notice,
+                    isRestoring: licenseSession.isRestoring,
                     onActivate: { key in await licenseSession.activate(key) }
                 )
             }
