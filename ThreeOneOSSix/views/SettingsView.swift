@@ -15,7 +15,7 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 26) {
                     appInfoCard
 
