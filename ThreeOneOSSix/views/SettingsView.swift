@@ -8,9 +8,8 @@ struct SettingsView: View {
 
     @ObservedObject var session: LicenseSession
     @AppStorage("faxAura.ledLightingEnabled") private var ledLightingEnabled = false
-    @AppStorage("faxAura.ledColorRed") private var ledColorRed = 0.0
-    @AppStorage("faxAura.ledColorGreen") private var ledColorGreen = 0.78
-    @AppStorage("faxAura.ledColorBlue") private var ledColorBlue = 1.0
+    @AppStorage("faxAura.ledHue") private var ledHue = 0.56
+    @AppStorage("faxAura.ledIntensity") private var ledIntensity = 0.72
     @State private var showsActivation = false
 
     init(session: LicenseSession) {
@@ -106,47 +105,10 @@ struct SettingsView: View {
                         .settingsGraphiteCard()
 
                         if ledLightingEnabled {
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("External LED color")
-                                        .font(.system(size: 16, weight: .medium, design: .rounded))
-                                        .foregroundStyle(.white)
-                                    Text("Choose the outer glow color")
-                                        .font(.system(size: 12, weight: .regular, design: .rounded))
-                                        .foregroundStyle(.white.opacity(0.55))
-                                }
-
-                                Spacer(minLength: 8)
-
-                                ColorPicker(
-                                    "External LED color",
-                                    selection: selectedLEDColorBinding,
-                                    supportsOpacity: false
-                                )
-                                .labelsHidden()
-                                .accessibilityLabel("External LED color")
-                            }
-                            .padding(.horizontal, 18)
-                            .frame(minHeight: 62)
-                            .settingsGraphiteCard(cornerRadius: 20)
-
-                            HStack(spacing: 10) {
-                                Text("LIVE PREVIEW")
-                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                    .tracking(1.1)
-                                    .foregroundStyle(.white.opacity(0.55))
-                                Spacer(minLength: 8)
-                                Capsule()
-                                    .fill(selectedLEDColor)
-                                    .frame(width: 88, height: 5)
-                                    .shadow(color: selectedLEDColor.opacity(0.75), radius: 7)
-                            }
-                            .padding(.horizontal, 18)
-                            .frame(minHeight: 48)
-                            .settingsGraphiteCard(cornerRadius: 18)
+                            ledColorControls
                         }
 
-                        Text("Turn on the outer LED glow and choose its color below. Text stays white for readability.")
+                        Text("Choose the accent color and glow strength. The selected color is applied throughout the console.")
                             .font(.system(size: 14, weight: .regular, design: .rounded))
                             .foregroundStyle(.white.opacity(0.55))
                             .fixedSize(horizontal: false, vertical: true)
@@ -165,6 +127,7 @@ struct SettingsView: View {
         }
         .tint(.white)
         .preferredColorScheme(.dark)
+        .onAppear(perform: migrateLegacyLEDColor)
         .sheet(isPresented: $showsActivation) {
             LicenseActivationView(
                 sessionNotice: session.notice,
@@ -176,27 +139,78 @@ struct SettingsView: View {
         }
     }
 
+    private var ledColorControls: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Text("COLOR SPECTRUM")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .tracking(1.05)
+                        .foregroundStyle(.white.opacity(0.58))
+                    Spacer()
+                    Circle()
+                        .fill(selectedLEDColor)
+                        .frame(width: 13, height: 13)
+                        .shadow(color: selectedLEDColor.opacity(0.8), radius: 8)
+                        .accessibilityLabel("Selected color")
+                }
+
+                Slider(value: $ledHue, in: 0...1)
+                    .tint(selectedLEDColor)
+                    .accessibilityLabel("Color spectrum")
+                    .accessibilityValue("Hue \(Int(ledHue * 360)) degrees")
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 17)
+            .padding(.bottom, 12)
+
+            Divider()
+                .overlay(Color.white.opacity(0.12))
+                .padding(.horizontal, 18)
+
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Text("INTENSITY")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .tracking(1.05)
+                        .foregroundStyle(.white.opacity(0.58))
+                    Spacer()
+                    Text("\(Int(ledIntensity * 100))%")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .contentTransition(.numericText())
+                }
+
+                Slider(value: $ledIntensity, in: 0...1)
+                    .tint(selectedLEDColor)
+                    .accessibilityLabel("LED intensity")
+                    .accessibilityValue("\(Int(ledIntensity * 100)) percent")
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 13)
+            .padding(.bottom, 16)
+        }
+        .settingsGraphiteCard(cornerRadius: 20)
+    }
+
     private var selectedLEDColor: Color {
-        Color(red: ledColorRed, green: ledColorGreen, blue: ledColorBlue)
+        Color(hue: ledHue, saturation: 0.86, brightness: 1)
     }
 
-    private var selectedLEDColorBinding: Binding<Color> {
-        Binding(
-            get: { selectedLEDColor },
-            set: { updateLEDColor($0) }
-        )
-    }
+    private func migrateLegacyLEDColor() {
+        guard UserDefaults.standard.object(forKey: "faxAura.ledHue") == nil,
+              let red = UserDefaults.standard.object(forKey: "faxAura.ledColorRed") as? Double,
+              let green = UserDefaults.standard.object(forKey: "faxAura.ledColorGreen") as? Double,
+              let blue = UserDefaults.standard.object(forKey: "faxAura.ledColorBlue") as? Double else { return }
 
-    private func updateLEDColor(_ color: Color) {
-        let uiColor = UIColor(color)
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
+        let oldColor = UIColor(red: CGFloat(red), green: CGFloat(green), blue: CGFloat(blue), alpha: 1)
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
         var alpha: CGFloat = 1
-        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return }
-        ledColorRed = Double(red)
-        ledColorGreen = Double(green)
-        ledColorBlue = Double(blue)
+        if oldColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) {
+            ledHue = Double(hue)
+        }
     }
 
     private var appInfoCard: some View {

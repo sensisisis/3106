@@ -1,15 +1,22 @@
 import SwiftUI
 
 enum AppTheme {
-    static let accent = Color.white
-    static let accentSecondary = Color(white: 0.62)
+    static var accent: Color { selectedLEDAccent }
+    static var accentSecondary: Color {
+        guard UserDefaults.standard.bool(forKey: "faxAura.ledLightingEnabled") else {
+            return Color(white: 0.62)
+        }
+        return selectedLEDAccent.opacity(0.72)
+    }
     static let pageBackground = Color.black
     static let consoleBackground = Color(white: 0.045)
-    static let accentGradient = LinearGradient(
-        colors: [.white, Color(white: 0.38)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
+    static var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [selectedLEDAccent, selectedLEDAccent.opacity(0.42)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
     static let pageInset: CGFloat = 12
     static let rowIconSize: CGFloat = 15
     static let rowIconFrame: CGFloat = 26
@@ -23,6 +30,15 @@ enum AppTheme {
     static let contentCardInset: CGFloat = 10
     static let contentCardPadding: CGFloat = 12
     static let actionCornerRadius: CGFloat = 10
+
+    private static var selectedLEDAccent: Color {
+        guard UserDefaults.standard.bool(forKey: "faxAura.ledLightingEnabled") else { return .white }
+        let storedHue = UserDefaults.standard.object(forKey: "faxAura.ledHue") as? Double ?? 0.56
+        let storedIntensity = UserDefaults.standard.object(forKey: "faxAura.ledIntensity") as? Double ?? 0.72
+        let hue = min(max(storedHue, 0), 1)
+        let intensity = min(max(storedIntensity, 0), 1)
+        return Color(hue: hue, saturation: 0.86, brightness: 0.42 + intensity * 0.58)
+    }
 }
 
 struct AppCardBorder: View {

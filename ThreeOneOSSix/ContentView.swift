@@ -13,9 +13,9 @@ struct ContentView: View {
     @State private var showLogs = false
     @State private var showAppGroupAlert = false
     @AppStorage("faxAura.ledLightingEnabled") private var ledLightingEnabled = false
-    @AppStorage("faxAura.ledColorRed") private var ledColorRed = 0.0
-    @AppStorage("faxAura.ledColorGreen") private var ledColorGreen = 0.78
-    @AppStorage("faxAura.ledColorBlue") private var ledColorBlue = 1.0
+    @AppStorage("faxAura.ledHue") private var ledHue = 0.56
+    @AppStorage("faxAura.ledIntensity") private var ledIntensity = 0.72
+    @AppStorage("faxAura.didEnterGameMode") private var didEnterGameMode = false
     @StateObject private var scanCoordinator = ScanCoordinator()
     @StateObject private var licenseSession = LicenseSession()
 
@@ -54,11 +54,17 @@ struct ContentView: View {
     var body: some View {
         Group {
             if showsInstalledContent {
-                Group {
-                    if horizontalSizeClass == .regular {
-                        regularLayout
-                    } else {
-                        compactLayout
+                if showsGameModeSelection {
+                    GameModeSelectionView {
+                        didEnterGameMode = true
+                    }
+                } else {
+                    Group {
+                        if horizontalSizeClass == .regular {
+                            regularLayout
+                        } else {
+                            compactLayout
+                        }
                     }
                 }
             } else {
@@ -85,7 +91,10 @@ struct ContentView: View {
             if requestID != nil { tabNavigation.select(AppSection.installed.rawValue) }
         }
         .onChange(of: licenseSession.isAuthorized) { authorized in
-            if !authorized { showSettings = false }
+            if !authorized {
+                showSettings = false
+                didEnterGameMode = false
+            }
         }
         .onAppear {
             tabNavigation.reconcileSelection(with: featureVisibility)
@@ -114,16 +123,16 @@ struct ContentView: View {
                     .stroke(
                         LinearGradient(
                             colors: [
-                                selectedLEDColor.opacity(0.78),
-                                selectedLEDColor.opacity(0.42),
-                                selectedLEDColor.opacity(0.66)
+                                selectedLEDColor.opacity(0.18 + ledIntensity * 0.60),
+                                selectedLEDColor.opacity(0.10 + ledIntensity * 0.35),
+                                selectedLEDColor.opacity(0.16 + ledIntensity * 0.52)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         lineWidth: 1
                     )
-                    .shadow(color: selectedLEDColor.opacity(0.24), radius: 12)
+                    .shadow(color: selectedLEDColor.opacity(ledIntensity * 0.26), radius: 4 + ledIntensity * 12)
                     .padding(5)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -147,8 +156,15 @@ struct ContentView: View {
         return licenseSession.isAuthorized
     }
 
+    private var showsGameModeSelection: Bool {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return false }
+#endif
+        return !didEnterGameMode
+    }
+
     private var selectedLEDColor: Color {
-        Color(red: ledColorRed, green: ledColorGreen, blue: ledColorBlue)
+        Color(hue: ledHue, saturation: 0.86, brightness: 1)
     }
 
     private var compactLayout: some View {
@@ -229,5 +245,145 @@ struct ContentView: View {
 
     private func openLogs() {
         showLogs = true
+    }
+}
+
+private struct GameModeSelectionView: View {
+    let onEnter: () -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 16) {
+                    HStack(spacing: 10) {
+                        AppLogo(size: 42)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("FAX AURA")
+                                .font(.system(size: 18, weight: .black, design: .rounded))
+                                .tracking(2.2)
+                                .foregroundStyle(.white)
+                            Text("PRIVATE ACCESS")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .tracking(1.1)
+                                .foregroundStyle(.white.opacity(0.54))
+                        }
+                        Spacer()
+                        HStack(spacing: 6) {
+                            Circle().fill(AppTheme.accent).frame(width: 7, height: 7)
+                            Text("ONLINE")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(AppTheme.accent)
+                        }
+                    }
+
+                    Image("ActivityHeaderArt")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: min(geometry.size.height * 0.22, 190))
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(AppTheme.accent.opacity(0.82), lineWidth: 1)
+                        }
+                        .accessibilityLabel("Fax Aura banner")
+
+                    HStack(spacing: 14) {
+                        Image("FreeFireReferenceIcon")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 72, height: 72)
+                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                    .stroke(AppTheme.accent.opacity(0.7), lineWidth: 1)
+                            }
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("FREE FIRE")
+                                .font(.system(size: 20, weight: .black, design: .rounded))
+                                .tracking(1.1)
+                                .foregroundStyle(.white)
+                            Text("NORMAL PROFILE")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.65))
+                        }
+
+                        Spacer(minLength: 4)
+
+                        HStack(spacing: 5) {
+                            Text("STABLE")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundStyle(AppTheme.accent)
+                    }
+                    .padding(14)
+                    .background(Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 19, style: .continuous)
+                            .stroke(AppTheme.accent.opacity(0.76), lineWidth: 1)
+                    }
+
+                    Text("SELECT GAME MODE")
+                        .font(.system(size: 12, weight: .black, design: .monospaced))
+                        .tracking(1.5)
+                        .foregroundStyle(AppTheme.accent.opacity(0.82))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 4)
+
+                    Button(action: onEnter) {
+                        HStack(spacing: 14) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(AppTheme.accent)
+                                .frame(width: 54, height: 54)
+                                .background(AppTheme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Normal")
+                                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                Text("Stable Free Fire profile")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.76))
+                                Text("PROFILE READY / SAFE MODE")
+                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(AppTheme.accent.opacity(0.82))
+                            }
+
+                            Spacer(minLength: 4)
+
+                            HStack(spacing: 6) {
+                                Text("ENTER")
+                                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 15)
+                            .frame(height: 40)
+                            .background(AppTheme.accent, in: Capsule())
+                        }
+                        .padding(15)
+                        .background(Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(AppTheme.accent.opacity(0.78), lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Continue to the Fax Aura console")
+                }
+                .padding(18)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: geometry.size.height, alignment: .center)
+            }
+            .background(Color.black.ignoresSafeArea())
+        }
+        .preferredColorScheme(.dark)
     }
 }
