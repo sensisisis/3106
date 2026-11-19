@@ -267,6 +267,8 @@ private struct GameModeSelectionView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let contentWidth = min(max(geometry.size.width - 36, 0), 484)
+            let bannerHeight = min(max(geometry.size.height * 0.18, 112), 145)
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 13) {
                     HStack(spacing: 10) {
@@ -293,8 +295,7 @@ private struct GameModeSelectionView: View {
                     Image("ActivityHeaderArt")
                         .resizable()
                         .scaledToFill()
-                        .frame(height: min(geometry.size.height * 0.18, 145))
-                        .frame(maxWidth: .infinity)
+                        .frame(width: contentWidth, height: bannerHeight)
                         .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
                         .overlay {
@@ -391,6 +392,7 @@ private struct GameModeSelectionView: View {
                     .buttonStyle(.plain)
                     .accessibilityHint("Continue to the Fax Aura console")
                 }
+                .frame(width: contentWidth)
                 .padding(18)
                 .frame(maxWidth: 520)
                 .frame(maxWidth: .infinity)

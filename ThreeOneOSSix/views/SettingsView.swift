@@ -44,8 +44,9 @@ struct SettingsView: View {
                 .padding(.horizontal, 18)
                 .frame(height: 52)
 
+            ScrollViewReader { scrollProxy in
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: 18) {
                     appInfoCard
 
                     VStack(alignment: .leading, spacing: 11) {
@@ -114,6 +115,7 @@ struct SettingsView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 4)
                     }
+                    .id("auraRGB")
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 14)
@@ -121,6 +123,16 @@ struct SettingsView: View {
             }
             .scrollIndicators(.hidden)
             .background(SettingsPalette.background.ignoresSafeArea())
+            .onAppear {
+#if targetEnvironment(simulator)
+                if ProcessInfo.processInfo.arguments.contains("--simulate-led-settings") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        scrollProxy.scrollTo("auraRGB", anchor: .bottom)
+                    }
+                }
+#endif
+            }
+            }
             }
             .background(SettingsPalette.background.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)

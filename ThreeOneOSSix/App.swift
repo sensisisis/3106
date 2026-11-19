@@ -70,7 +70,10 @@ struct ThreeOneOSSixApp: App {
 
     private func checkForUpdate() {
 #if targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") || ProcessInfo.processInfo.arguments.contains("--simulate-login-design") { return }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--simulate-installed-design")
+            || arguments.contains("--simulate-game-mode-selection")
+            || arguments.contains("--simulate-login-design") { return }
 #endif
         Task {
             guard let offer = await AppUpdateChecker.check() else { return }
@@ -82,7 +85,10 @@ struct ThreeOneOSSixApp: App {
     /// (persisted), so repeated quick app switches cost nothing.
     private func checkForUpdateThrottled() {
 #if targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") || ProcessInfo.processInfo.arguments.contains("--simulate-login-design") { return }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--simulate-installed-design")
+            || arguments.contains("--simulate-game-mode-selection")
+            || arguments.contains("--simulate-login-design") { return }
 #endif
         Task {
             guard let offer = await AppUpdateChecker.throttledForegroundCheck() else { return }
