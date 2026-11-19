@@ -106,7 +106,7 @@ struct PatchProjectsView: View {
                 Text("AURA CONSOLE")
                     .font(.system(size: 13, weight: .black, design: .monospaced))
                     .tracking(1.4)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.accent)
                 Text("PATCH CONTROL / \(language.text("installed.online"))")
                     .font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary)
@@ -124,7 +124,7 @@ struct PatchProjectsView: View {
         .padding(.bottom, 2)
         .overlay(alignment: .bottom) {
             HStack(spacing: 5) {
-                Rectangle().fill(Color.white.opacity(0.92)).frame(width: 26, height: 1)
+                Rectangle().fill(AppTheme.accent.opacity(0.92)).frame(width: 26, height: 1)
                 Rectangle().fill(Color.white.opacity(0.14)).frame(height: 1)
             }
             .padding(.horizontal, 14)
@@ -181,9 +181,9 @@ struct PatchProjectsView: View {
                 }
                 Spacer()
                 Circle()
-                    .fill(Color.white)
+                    .fill(Color.green)
                     .frame(width: 9, height: 9)
-                    .shadow(color: .white, radius: 4)
+                    .shadow(color: .green, radius: 4)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 12)
@@ -199,7 +199,7 @@ struct PatchProjectsView: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.42), lineWidth: 0.9)
+                    .stroke(AppTheme.accent.opacity(0.48), lineWidth: 0.9)
             }
             .overlay { activityOrbitMotion }
             .shadow(color: .black.opacity(0.72), radius: 8, y: 3)
@@ -235,11 +235,11 @@ struct PatchProjectsView: View {
     private var activityLogIcon: some View {
         ZStack {
             Circle()
-                .fill(Color.white.opacity(0.28))
-                .shadow(color: .white.opacity(0.18), radius: 5)
+                .fill(AppTheme.accent.opacity(0.28))
+                .shadow(color: AppTheme.accent.opacity(0.18), radius: 5)
             Image(systemName: "waveform.path.ecg")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppTheme.accent)
                 .accessibilityHidden(true)
         }
         .frame(width: 34, height: 34)
@@ -289,11 +289,11 @@ struct PatchProjectsView: View {
         HStack(spacing: 5) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white.opacity(0.82))
+                .foregroundStyle(AppTheme.accent.opacity(0.9))
             VStack(alignment: .leading, spacing: 0) {
                 Text(value)
                     .font(.system(size: 10, weight: .black, design: .monospaced))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.accent)
                 Text(label.uppercased())
                     .font(.system(size: 6.5, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary)
@@ -337,6 +337,7 @@ struct PatchProjectsView: View {
         VStack(spacing: 4) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(AppTheme.accent)
             Text(language.text(key).uppercased())
                 .font(.system(size: 7, weight: .black, design: .monospaced))
                 .lineLimit(1)
@@ -358,7 +359,7 @@ struct PatchProjectsView: View {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .strokeBorder(.white.opacity(0.30), lineWidth: 0.8)
                 Rectangle()
-                    .fill(Color.white.opacity(0.72))
+                    .fill(AppTheme.accent.opacity(0.90))
                     .frame(width: 18, height: 1)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(.leading, 10)
@@ -371,12 +372,12 @@ struct PatchProjectsView: View {
     private var functionsHeading: some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(.white)
+                .fill(AppTheme.accent)
                 .frame(width: 4, height: 23)
             VStack(alignment: .leading, spacing: 1) {
                 Text("FUNCTIONS")
                     .font(.system(size: 20, weight: .black, design: .monospaced))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.accent)
                 Text("PATCH MODULES / AVAILABLE")
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.72))
@@ -793,16 +794,16 @@ struct PatchProjectsView: View {
         .overlay {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.white.opacity(0.28), lineWidth: 0.8)
+                    .stroke(AppTheme.accent.opacity(0.42), lineWidth: 0.8)
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
-                        LinearGradient(colors: [.white.opacity(0.14), .clear, .white.opacity(0.30)],
+                        LinearGradient(colors: [AppTheme.accent.opacity(0.16), .clear, AppTheme.accent.opacity(0.38)],
                                        startPoint: .topLeading, endPoint: .bottomTrailing),
                         lineWidth: 1
                     )
                 HStack {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(.white)
+                        .fill(AppTheme.accent)
                         .frame(width: 3)
                         .padding(.vertical, 9)
                     Spacer()
@@ -996,16 +997,16 @@ private struct PatchModuleToggle: View {
                 .foregroundStyle(isActive ? Color.black : Color.white)
                 .padding(.horizontal, 7)
                 .frame(width: 58, height: 28)
-                .background(isActive ? Color.white : Color.white.opacity(0.10), in: Capsule())
-                .overlay {
-                    Capsule()
-                        .strokeBorder(
-                            isActive ? Color.white.opacity(0.90) : Color.white.opacity(0.38),
-                            lineWidth: 1
-                        )
-                }
+                    .background(isActive ? AppTheme.accent : Color.white.opacity(0.10), in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(
+                                isActive ? AppTheme.accent.opacity(0.96) : Color.white.opacity(0.38),
+                                lineWidth: 1
+                            )
+                    }
                 .shadow(
-                    color: isActive ? Color.white.opacity(0.18) : .clear,
+                    color: isActive ? AppTheme.accent.opacity(0.32) : .clear,
                     radius: 7
                 )
                 .animation(.easeInOut(duration: 0.16), value: isActive)

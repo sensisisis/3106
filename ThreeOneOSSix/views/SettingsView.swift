@@ -155,10 +155,7 @@ struct SettingsView: View {
                         .accessibilityLabel("Selected color")
                 }
 
-                Slider(value: $ledHue, in: 0...1)
-                    .tint(selectedLEDColor)
-                    .accessibilityLabel("Color spectrum")
-                    .accessibilityValue("Hue \(Int(ledHue * 360)) degrees")
+                LEDColorSpectrumSlider(value: $ledHue)
             }
             .padding(.horizontal, 18)
             .padding(.top, 17)
@@ -210,6 +207,59 @@ struct SettingsView: View {
         var alpha: CGFloat = 1
         if oldColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) {
             ledHue = Double(hue)
+        }
+    }
+
+    private struct LEDColorSpectrumSlider: View {
+        @Binding var value: Double
+
+        private let thumbSize: CGFloat = 22
+        private let spectrum: [Color] = [
+            .red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink, .red
+        ]
+
+        var body: some View {
+            GeometryReader { geometry in
+                let travel = max(geometry.size.width - thumbSize, 0)
+
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(LinearGradient(colors: spectrum, startPoint: .leading, endPoint: .trailing))
+                        .frame(height: 8)
+                        .padding(.horizontal, thumbSize / 2)
+
+                    Circle()
+                        .fill(.white)
+                        .frame(width: thumbSize, height: thumbSize)
+                        .overlay(Circle().stroke(selectedColor.opacity(0.85), lineWidth: 2))
+                        .shadow(color: selectedColor.opacity(0.65), radius: 5)
+                        .offset(x: travel * CGFloat(min(max(value, 0), 1)))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { drag in
+                            guard travel > 0 else { return }
+                            value = min(max(Double((drag.location.x - thumbSize / 2) / travel), 0), 1)
+                        }
+                )
+            }
+            .frame(height: 30)
+            .accessibilityElement()
+            .accessibilityLabel("Color spectrum")
+            .accessibilityValue("Hue \(Int(value * 360)) degrees")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: value = min(value + 0.025, 1)
+                case .decrement: value = max(value - 0.025, 0)
+                @unknown default: break
+                }
+            }
+        }
+
+        private var selectedColor: Color {
+            Color(hue: value, saturation: 0.86, brightness: 1)
         }
     }
 

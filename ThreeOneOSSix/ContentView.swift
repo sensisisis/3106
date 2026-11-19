@@ -22,6 +22,14 @@ struct ContentView: View {
     init() {
 #if targetEnvironment(simulator)
         let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--simulate-led-settings") {
+            UserDefaults.standard.set(true, forKey: "faxAura.ledLightingEnabled")
+            UserDefaults.standard.set(0.56, forKey: "faxAura.ledHue")
+            UserDefaults.standard.set(0.72, forKey: "faxAura.ledIntensity")
+        }
+        if arguments.contains("--simulate-game-mode-selection") {
+            UserDefaults.standard.set(false, forKey: "faxAura.didEnterGameMode")
+        }
         let initialTab: Int
         if arguments.contains("--simulate-new-tab")
             || arguments.contains("--simulate-sources-tab")
@@ -80,7 +88,9 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .task(id: scenePhase) {
 #if targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return }
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--simulate-installed-design")
+                || arguments.contains("--simulate-game-mode-selection") { return }
 #endif
             await licenseSession.runForegroundSession(for: scenePhase)
         }
@@ -151,14 +161,18 @@ struct ContentView: View {
 
     private var showsInstalledContent: Bool {
 #if targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return true }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--simulate-installed-design")
+            || arguments.contains("--simulate-game-mode-selection") { return true }
 #endif
         return licenseSession.isAuthorized
     }
 
     private var showsGameModeSelection: Bool {
 #if targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--simulate-installed-design") { return false }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--simulate-game-mode-selection") { return true }
+        if arguments.contains("--simulate-installed-design") { return false }
 #endif
         return !didEnterGameMode
     }
@@ -254,9 +268,9 @@ private struct GameModeSelectionView: View {
     var body: some View {
         GeometryReader { geometry in
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
+                VStack(spacing: 13) {
                     HStack(spacing: 10) {
-                        AppLogo(size: 42)
+                        AppLogo(size: 32)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("FAX AURA")
                                 .font(.system(size: 18, weight: .black, design: .rounded))
@@ -279,12 +293,12 @@ private struct GameModeSelectionView: View {
                     Image("ActivityHeaderArt")
                         .resizable()
                         .scaledToFill()
-                        .frame(height: min(geometry.size.height * 0.22, 190))
+                        .frame(height: min(geometry.size.height * 0.18, 145))
                         .frame(maxWidth: .infinity)
                         .clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            RoundedRectangle(cornerRadius: 17, style: .continuous)
                                 .stroke(AppTheme.accent.opacity(0.82), lineWidth: 1)
                         }
                         .accessibilityLabel("Fax Aura banner")
@@ -293,17 +307,17 @@ private struct GameModeSelectionView: View {
                         Image("FreeFireReferenceIcon")
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 72, height: 72)
-                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
                                     .stroke(AppTheme.accent.opacity(0.7), lineWidth: 1)
                             }
 
-                        VStack(alignment: .leading, spacing: 5) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text("FREE FIRE")
-                                .font(.system(size: 20, weight: .black, design: .rounded))
-                                .tracking(1.1)
+                                .font(.system(size: 17, weight: .black, design: .rounded))
+                                .tracking(0.8)
                                 .foregroundStyle(.white)
                             Text("NORMAL PROFILE")
                                 .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -320,7 +334,7 @@ private struct GameModeSelectionView: View {
                         }
                         .foregroundStyle(AppTheme.accent)
                     }
-                    .padding(14)
+                    .padding(12)
                     .background(Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 19, style: .continuous)

@@ -96,10 +96,16 @@ sleep 2
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/installed-single-module.png"
 swift "$ROOT/Tests/check_orbit_frames.swift" "$OUTPUT"
 
-echo 'Capturing Fax Aura settings using real simulator device information'
+echo 'Capturing post-license Free Fire game mode selection'
 xcrun simctl terminate "$DEVICE" "$BUNDLE"
-xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design --simulate-settings
+xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-game-mode-selection --simulate-led-settings
 sleep 3
+xcrun simctl io "$DEVICE" screenshot "$OUTPUT/fax-aura-game-mode.png"
+xcrun simctl terminate "$DEVICE" "$BUNDLE"
+
+echo 'Capturing Fax Aura settings with LED spectrum enabled'
+xcrun simctl launch "$DEVICE" "$BUNDLE" --simulate-installed-design --simulate-settings --simulate-led-settings
+sleep 5
 xcrun simctl io "$DEVICE" screenshot "$OUTPUT/fax-aura-settings.png"
 xcrun simctl terminate "$DEVICE" "$BUNDLE"
 
