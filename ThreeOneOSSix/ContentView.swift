@@ -12,9 +12,6 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showLogs = false
     @State private var showAppGroupAlert = false
-    @AppStorage("faxAura.ledLightingEnabled") private var ledLightingEnabled = false
-    @AppStorage("faxAura.ledHue") private var ledHue = 0.56
-    @AppStorage("faxAura.ledIntensity") private var ledIntensity = 0.72
     @AppStorage("faxAura.didEnterGameMode") private var didEnterGameMode = false
     @StateObject private var scanCoordinator = ScanCoordinator()
     @StateObject private var licenseSession = LicenseSession()
@@ -127,27 +124,6 @@ struct ContentView: View {
                 .environmentObject(scanCoordinator)
                 .environment(\.appLanguage, language)
         }
-        .overlay {
-            if ledLightingEnabled && showsInstalledContent {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                selectedLEDColor.opacity(0.18 + ledIntensity * 0.60),
-                                selectedLEDColor.opacity(0.10 + ledIntensity * 0.35),
-                                selectedLEDColor.opacity(0.16 + ledIntensity * 0.52)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-                    .shadow(color: selectedLEDColor.opacity(ledIntensity * 0.26), radius: 4 + ledIntensity * 12)
-                    .padding(5)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
         .overlay(alignment: .bottom) {
             if scanCoordinator.isRunning && !scanCoordinator.isPresented {
                 ScanRunningBanner()
@@ -175,10 +151,6 @@ struct ContentView: View {
         if arguments.contains("--simulate-installed-design") { return false }
 #endif
         return !didEnterGameMode
-    }
-
-    private var selectedLEDColor: Color {
-        Color(hue: ledHue, saturation: 0.86, brightness: 1)
     }
 
     private var compactLayout: some View {
