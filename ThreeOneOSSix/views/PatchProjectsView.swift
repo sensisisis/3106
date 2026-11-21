@@ -38,6 +38,7 @@ struct PatchProjectsView: View {
     let onOpenSettings: () -> Void
     let onOpenLogs: () -> Void
     let onPatchApplied: @MainActor (UUID, String, UUID) async -> Void
+    let onPatchUndone: @MainActor (UUID, String, UUID) async -> Void
 
     private var isDesignPreview: Bool {
 #if targetEnvironment(simulator)
@@ -431,11 +432,13 @@ struct PatchProjectsView: View {
     init(
         onOpenSettings: @escaping () -> Void = {},
         onOpenLogs: @escaping () -> Void = {},
-        onPatchApplied: @escaping @MainActor (UUID, String, UUID) async -> Void = { _, _, _ in }
+        onPatchApplied: @escaping @MainActor (UUID, String, UUID) async -> Void = { _, _, _ in },
+        onPatchUndone: @escaping @MainActor (UUID, String, UUID) async -> Void = { _, _, _ in }
     ) {
         self.onOpenSettings = onOpenSettings
         self.onOpenLogs = onOpenLogs
         self.onPatchApplied = onPatchApplied
+        self.onPatchUndone = onPatchUndone
 #if targetEnvironment(simulator)
         _showCreate = State(
             initialValue: ProcessInfo.processInfo.arguments.contains("--simulate-patch-editor")
@@ -782,7 +785,8 @@ struct PatchProjectsView: View {
                 storeIsBusy: store.isBusy || isDesignPreview,
                 appIsBusy: $isModuleOperationInProgress,
                 onUpdate: store.reload,
-                onPatchApplied: onPatchApplied
+                onPatchApplied: onPatchApplied,
+                onPatchUndone: onPatchUndone
             )
         }
         .padding(.horizontal, 9)
@@ -927,8 +931,10 @@ private struct PatchModuleToggle: View {
     @Binding var appIsBusy: Bool
     let onUpdate: () -> Void
     let onPatchApplied: @MainActor (UUID, String, UUID) async -> Void
+    let onPatchUndone: @MainActor (UUID, String, UUID) async -> Void
 
     @State private var showChangedRestoreConfirmation = false
+    @State private var showRestoreConfirmation = false
     @State private var isWorking = false
     @State private var pendingActiveState: Bool?
     @State private var changedPaths: [String] = []
@@ -972,15 +978,23 @@ private struct PatchModuleToggle: View {
 
     var body: some View {
         VStack(spacing: 3) {
-            Text(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
+            Text(language.text(hasUnclassifiedTransaction
+                ? "patch.module_restore_unavailable"
+                : isActive ? "patch.module_running" : "patch.module_ready"))
                 .font(.system(size: 8, weight: .black, design: .monospaced))
-                .foregroundStyle(isActive ? Color.green : Color.white.opacity(0.62))
+                .foregroundStyle(hasUnclassifiedTransaction
+                    ? Color.orange
+                    : isActive ? Color.green : Color.white.opacity(0.62))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(isActive ? Color.green.opacity(0.15) : Color.white.opacity(0.08), in: Capsule())
+                .background(hasUnclassifiedTransaction
+                    ? Color.orange.opacity(0.15)
+                    : isActive ? Color.green.opacity(0.15) : Color.white.opacity(0.08), in: Capsule())
                 .lineLimit(1)
 
-            Text(isActive ? "STOP MODULE" : "START MODULE")
+            Text(language.text(hasUnclassifiedTransaction
+                ? "patch.module_undo_unavailable"
+                : isActive ? "patch.module_undo_action" : "patch.module_apply_action"))
                 .font(.system(size: 7, weight: .bold, design: .monospaced))
                 .foregroundStyle(.white.opacity(isActive ? 0.88 : 0.82))
                 .lineLimit(1)
@@ -989,7 +1003,7 @@ private struct PatchModuleToggle: View {
                 requestToggle(enabled: !isActive)
             } label: {
                 HStack(spacing: 5) {
-                    Text(isActive ? "ON" : "OFF")
+                    Text(hasUnclassifiedTransaction ? "—" : isActive ? "ON" : "OFF")
                         .font(.system(size: 8, weight: .black, design: .monospaced))
                     Circle()
                         .fill(isActive ? Color.black : Color.white)
@@ -1020,10 +1034,24 @@ private struct PatchModuleToggle: View {
             .disabled(
                 appIsBusy || storeIsBusy || legacyReceipt != nil || hasUnclassifiedTransaction
             )
-            .accessibilityLabel("\(project.name), \(isActive ? "ON" : "OFF")")
-            .accessibilityValue(language.text(isActive ? "patch.module_running" : "patch.module_ready"))
+            .accessibilityLabel("\(project.name), \(hasUnclassifiedTransaction ? language.text("patch.module_restore_unavailable") : isActive ? "ON" : "OFF")")
+            .accessibilityValue(language.text(hasUnclassifiedTransaction
+                ? "patch.module_restore_unavailable"
+                : isActive ? "patch.module_running" : "patch.module_ready"))
         }
         .frame(width: 64)
+        .confirmationDialog(
+            language.text("patch.restore_confirm_title"),
+            isPresented: $showRestoreConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(language.text("patch.restore"), role: .destructive) {
+                prepareRestore()
+            }
+            Button(language.text("common.cancel"), role: .cancel) { cancelPendingAction() }
+        } message: {
+            Text(language.text("patch.restore_confirm_message"))
+        }
         .confirmationDialog(
             language.text("patch.restore_changed_title"),
             isPresented: $showChangedRestoreConfirmation,
@@ -1035,6 +1063,9 @@ private struct PatchModuleToggle: View {
             Button(language.text("common.cancel"), role: .cancel) { cancelPendingAction() }
         } message: {
             Text(changedRestoreMessage)
+        }
+        .onChange(of: showRestoreConfirmation) { showing in
+            if !showing { releaseBusyIfIdle() }
         }
         .onChange(of: isWorking) { working in
             if !working { releaseBusyIfIdle() }
@@ -1053,22 +1084,24 @@ private struct PatchModuleToggle: View {
         guard !appIsBusy, !storeIsBusy, !isWorking, legacyReceipt == nil,
               !hasUnclassifiedTransaction, enabled != isPersistentlyActive else { return }
         appIsBusy = true
-        pendingActiveState = enabled
         if enabled {
+            pendingActiveState = true
             applyRule()
         } else {
-            prepareRestore()
+            pendingActiveState = nil
+            showRestoreConfirmation = true
         }
     }
 
     private func cancelPendingAction() {
+        showRestoreConfirmation = false
         showChangedRestoreConfirmation = false
         pendingActiveState = nil
         appIsBusy = false
     }
 
     private func releaseBusyIfIdle() {
-        guard !isWorking, !showChangedRestoreConfirmation else { return }
+        guard !isWorking, !showRestoreConfirmation, !showChangedRestoreConfirmation else { return }
         pendingActiveState = nil
         appIsBusy = false
     }
@@ -1142,6 +1175,9 @@ private struct PatchModuleToggle: View {
                     appIsBusy = false
                     onUpdate()
                     alert = PatchStoreAlert(titleKey: "common.done", messageKey: "patch.restored_message")
+                    Task {
+                        await onPatchUndone(project.id, project.name, rule.id)
+                    }
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
@@ -1176,6 +1212,9 @@ private struct PatchModuleToggle: View {
                     appIsBusy = false
                     onUpdate()
                     alert = PatchStoreAlert(titleKey: "common.done", messageKey: "patch.restored_message")
+                    Task {
+                        await onPatchUndone(project.id, project.name, rule.id)
+                    }
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {

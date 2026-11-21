@@ -166,6 +166,10 @@
 "patch.module_stop_message" = "The original file will be restored after checking for changes made since activation.";
 "patch.module_ready" = "READY";
 "patch.module_running" = "RUNNING";
+"patch.module_undo_action" = "UNDO PATCH";
+"patch.module_apply_action" = "APPLY PATCH";
+"patch.module_restore_unavailable" = "UNKNOWN";
+"patch.module_undo_unavailable" = "UNDO N/A";
 "patch.module_legacy_notice" = "This older project was applied as one transaction. Restore the complete patch before using individual module switches.";
 "patch.module_legacy_restore" = "Restore Legacy Patch";
 "patch.add_rule" = "Add Rule";

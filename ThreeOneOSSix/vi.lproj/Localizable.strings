@@ -166,6 +166,10 @@
 "patch.module_stop_message" = "File gốc sẽ được khôi phục sau khi kiểm tra các thay đổi kể từ lúc kích hoạt.";
 "patch.module_ready" = "SẴN SÀNG";
 "patch.module_running" = "ĐANG CHẠY";
+"patch.module_undo_action" = "HOÀN TÁC PATCH";
+"patch.module_apply_action" = "ÁP DỤNG PATCH";
+"patch.module_restore_unavailable" = "CHƯA RÕ";
+"patch.module_undo_unavailable" = "UNDO N/A";
 "patch.module_legacy_notice" = "Dự án cũ này được áp dụng trong một giao dịch duy nhất. Hãy khôi phục toàn bộ patch trước khi dùng công tắc từng mô-đun.";
 "patch.module_legacy_restore" = "Khôi phục patch cũ";
 "patch.add_rule" = "Thêm quy tắc";

@@ -186,6 +186,13 @@ struct ContentView: View {
                         patchName: patchName,
                         ruleID: ruleID
                     )
+                },
+                onPatchUndone: { projectID, patchName, ruleID in
+                    await licenseSession.recordPatchUndone(
+                        projectID: projectID,
+                        patchName: patchName,
+                        ruleID: ruleID
+                    )
                 }
             )
         case .files:

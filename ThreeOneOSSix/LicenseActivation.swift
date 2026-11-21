@@ -165,11 +165,36 @@ final class LicenseSession: ObservableObject {
     /// Reports only a patch that DevicePatchService already applied successfully.
     /// Telemetry is best-effort: failures never roll back or block the local patch.
     func recordPatchApplied(projectID: UUID, patchName: String, ruleID: UUID) async {
+        await recordPatchEvent(
+            rpcURL: supabasePatchEventRPCURL,
+            projectID: projectID,
+            patchName: patchName,
+            ruleID: ruleID
+        )
+    }
+
+    /// Reports only a patch whose original files DevicePatchService restored successfully.
+    /// Telemetry is best-effort and never changes the outcome of the local restore.
+    func recordPatchUndone(projectID: UUID, patchName: String, ruleID: UUID) async {
+        await recordPatchEvent(
+            rpcURL: supabasePatchUndoEventRPCURL,
+            projectID: projectID,
+            patchName: patchName,
+            ruleID: ruleID
+        )
+    }
+
+    private func recordPatchEvent(
+        rpcURL: String,
+        projectID: UUID,
+        patchName: String,
+        ruleID: UUID
+    ) async {
         guard isAuthorized,
               let savedKey = storedKey,
               let sessionVersion = storedSessionVersion(for: normalized(savedKey)),
               let stableDeviceID = deviceID,
-              let url = URL(string: supabasePatchEventRPCURL),
+              let url = URL(string: rpcURL),
               let appBundleID = Bundle.main.bundleIdentifier else {
             return
         }
@@ -227,6 +252,8 @@ final class LicenseSession: ObservableObject {
             return
         }
     }
+
+    private let supabasePatchUndoEventRPCURL = "https://skarpahwcwkqdfxgtvlp.supabase.co/rest/v1/rpc/fax_license_record_patch_undo_event"
 
     private func apply(
         _ outcome: LicenseValidationOutcome,

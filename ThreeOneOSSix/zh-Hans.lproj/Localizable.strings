@@ -166,6 +166,10 @@
 "patch.module_stop_message" = "检查激活后的文件更改后，将恢复原始文件。";
 "patch.module_ready" = "就绪";
 "patch.module_running" = "运行中";
+"patch.module_undo_action" = "撤销补丁";
+"patch.module_apply_action" = "应用补丁";
+"patch.module_restore_unavailable" = "状态未知";
+"patch.module_undo_unavailable" = "无法撤销";
 "patch.module_legacy_notice" = "此旧版项目以单个事务应用。使用单独的模块开关前，请先恢复整个补丁。";
 "patch.module_legacy_restore" = "恢复旧版补丁";
 "patch.add_rule" = "添加规则";
