@@ -42,6 +42,7 @@ final class LicenseSession: ObservableObject {
     private let expirationStorage = "3106.supabase.license.expires-at"
     private let supabaseRPCURL = "https://skarpahwcwkqdfxgtvlp.supabase.co/rest/v1/rpc/fax_license_validate"
     private let supabaseRestoreRPCURL = "https://skarpahwcwkqdfxgtvlp.supabase.co/rest/v1/rpc/fax_license_restore"
+    private let supabasePatchEventRPCURL = "https://skarpahwcwkqdfxgtvlp.supabase.co/rest/v1/rpc/fax_license_record_patch_event"
     private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrYXJwYWh3Y3drcWRmeGd0dmxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMjc3NTYsImV4cCI6MjEwNzYwMzc1Nn0.PUh5QIs_W61En2PdyML31uzMFG_8NvCAHeRp1qYBzFw"
     private var validationGeneration = 0
     private var explicitActivationInFlight = false
@@ -159,6 +160,72 @@ final class LicenseSession: ObservableObject {
         )
         guard generation == validationGeneration, !Task.isCancelled else { return }
         _ = apply(outcome, key: normalizedKey)
+    }
+
+    /// Reports only a patch that DevicePatchService already applied successfully.
+    /// Telemetry is best-effort: failures never roll back or block the local patch.
+    func recordPatchApplied(projectID: UUID, patchName: String, ruleID: UUID) async {
+        guard isAuthorized,
+              let savedKey = storedKey,
+              let sessionVersion = storedSessionVersion(for: normalized(savedKey)),
+              let stableDeviceID = deviceID,
+              let url = URL(string: supabasePatchEventRPCURL),
+              let appBundleID = Bundle.main.bundleIdentifier else {
+            return
+        }
+
+        let cleanPatchName = patchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let appVersion = AppInfo.appVersion
+        let appBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        let iosVersion = UIDevice.current.systemVersion
+        guard !cleanPatchName.isEmpty,
+              cleanPatchName.count <= 96,
+              !cleanPatchName.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+              !appBundleID.isEmpty, appBundleID.count <= 255,
+              !appVersion.isEmpty, appVersion.count <= 32,
+              !appBuild.isEmpty, appBuild.count <= 32,
+              !iosVersion.isEmpty, iosVersion.count <= 32 else {
+            return
+        }
+
+        let keyHash = SHA256.hash(data: Data(normalized(savedKey).utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let payload: [String: Any] = [
+            "p_key_hash": keyHash,
+            "p_device_id": stableDeviceID,
+            "p_session_version": sessionVersion,
+            "p_event_id": UUID().uuidString.lowercased(),
+            "p_project_id": projectID.uuidString.lowercased(),
+            "p_rule_id": ruleID.uuidString.lowercased(),
+            "p_patch_name": cleanPatchName,
+            "p_app_bundle_id": appBundleID,
+            "p_app_version": appVersion,
+            "p_app_build": appBuild,
+            "p_ios_version": iosVersion
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                return
+            }
+            let result = try JSONDecoder().decode(SupabasePatchEventResponse.self, from: data)
+            guard result.ok, result.code == "recorded" else { return }
+        } catch {
+            // Network/telemetry errors intentionally do not affect patch success.
+            return
+        }
     }
 
     private func apply(
@@ -657,6 +724,11 @@ private struct SupabaseLicenseResponse: Decodable {
         sessionVersion = try container.decode(Int.self, forKey: .sessionVersion)
         remainingSeconds = try container.decodeIfPresent(Double.self, forKey: .remainingSeconds)
     }
+}
+
+private struct SupabasePatchEventResponse: Decodable {
+    let ok: Bool
+    let code: String
 }
 
 struct LicenseActivationView: View {

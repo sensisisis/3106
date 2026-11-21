@@ -177,7 +177,17 @@ struct ContentView: View {
                 onOpenLogs: openLogs
             )
         case .installed:
-            PatchProjectsView(onOpenSettings: openSettings, onOpenLogs: openLogs)
+            PatchProjectsView(
+                onOpenSettings: openSettings,
+                onOpenLogs: openLogs,
+                onPatchApplied: { projectID, patchName, ruleID in
+                    await licenseSession.recordPatchApplied(
+                        projectID: projectID,
+                        patchName: patchName,
+                        ruleID: ruleID
+                    )
+                }
+            )
         case .files:
             AppDataBrowserView(
                 tabSession: filesTabSession,

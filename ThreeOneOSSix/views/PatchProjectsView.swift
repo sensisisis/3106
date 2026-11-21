@@ -37,6 +37,7 @@ struct PatchProjectsView: View {
     @State private var simulatedWallpaperDetailGate = OneShotPresentationGate()
     let onOpenSettings: () -> Void
     let onOpenLogs: () -> Void
+    let onPatchApplied: @MainActor (UUID, String, UUID) async -> Void
 
     private var isDesignPreview: Bool {
 #if targetEnvironment(simulator)
@@ -429,10 +430,12 @@ struct PatchProjectsView: View {
 
     init(
         onOpenSettings: @escaping () -> Void = {},
-        onOpenLogs: @escaping () -> Void = {}
+        onOpenLogs: @escaping () -> Void = {},
+        onPatchApplied: @escaping @MainActor (UUID, String, UUID) async -> Void = { _, _, _ in }
     ) {
         self.onOpenSettings = onOpenSettings
         self.onOpenLogs = onOpenLogs
+        self.onPatchApplied = onPatchApplied
 #if targetEnvironment(simulator)
         _showCreate = State(
             initialValue: ProcessInfo.processInfo.arguments.contains("--simulate-patch-editor")
@@ -778,7 +781,8 @@ struct PatchProjectsView: View {
                 rule: rule,
                 storeIsBusy: store.isBusy || isDesignPreview,
                 appIsBusy: $isModuleOperationInProgress,
-                onUpdate: store.reload
+                onUpdate: store.reload,
+                onPatchApplied: onPatchApplied
             )
         }
         .padding(.horizontal, 9)
@@ -922,6 +926,7 @@ private struct PatchModuleToggle: View {
     let storeIsBusy: Bool
     @Binding var appIsBusy: Bool
     let onUpdate: () -> Void
+    let onPatchApplied: @MainActor (UUID, String, UUID) async -> Void
 
     @State private var showChangedRestoreConfirmation = false
     @State private var isWorking = false
@@ -1086,11 +1091,17 @@ private struct PatchModuleToggle: View {
                     throw PatchPackageError.invalidProject
                 }
                 _ = try DevicePatchService.apply(rule: currentRule, in: sourceProject)
+                let appliedProjectID = sourceProject.id
+                let appliedPatchName = sourceProject.name
+                let appliedRuleID = currentRule.id
                 await MainActor.run {
                     isWorking = false
                     appIsBusy = false
                     onUpdate()
                     alert = PatchStoreAlert(titleKey: "common.done", messageKey: "patch.module_applied_message")
+                    Task {
+                        await onPatchApplied(appliedProjectID, appliedPatchName, appliedRuleID)
+                    }
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
